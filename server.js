@@ -117,12 +117,7 @@ class Game {
                 }
                 break;
             case 'DEAL_AGAIN':
-                if (this.state === 'score') {
-                    // Start a new hand, preserving total scores
-                    const oldScores = { ...this.teamScores };
-                    game = new Game();
-                    game.teamScores = oldScores;
-                }
+                // No-op here; DEAL_AGAIN is handled at the room level to replace the room's game instance
                 break;
         }
     }
@@ -502,6 +497,19 @@ wss.on('connection', (ws, req) => {
             } else {
                 // Re-broadcast lobby in case a client needs refresh
                 broadcastPlayerCount(gameId);
+            }
+            return;
+        }
+
+        if (action.type === 'DEAL_AGAIN') {
+            const r2 = rooms.get(gameId);
+            if (!r2 || !r2.game) return;
+            if (r2.game.state === 'score') {
+                // Start a new hand, preserving cumulative team scores
+                const oldScores = { ...r2.game.teamScores };
+                r2.game = new Game();
+                r2.game.teamScores = oldScores;
+                broadcastGameState(gameId);
             }
             return;
         }
