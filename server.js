@@ -452,14 +452,8 @@ wss.on('connection', (ws, req) => {
 
     ws.send(JSON.stringify({ type: 'welcome', playerIndex }));
 
-    // Start game when room is full
-    if (room.players.length === NUM_PLAYERS) {
-        console.log(`[${gameId}] All players connected. Starting game.`);
-        room.game = new Game();
-        broadcastGameState(gameId);
-    } else {
-        broadcastPlayerCount(gameId);
-    }
+    // Show lobby status; game starts when a client sends START_GAME
+    broadcastPlayerCount(gameId);
 
     ws.on('message', (message) => {
         const r = rooms.get(gameId);
@@ -494,6 +488,21 @@ wss.on('connection', (ws, req) => {
             const seat = Math.max(0, Math.min(NUM_PLAYERS - 1, parseInt(action.seat, 10)));
             const difficulty = (action.difficulty || 'medium').toLowerCase();
             addBotAtSeat(gameId, seat, difficulty);
+            return;
+        }
+
+        if (action.type === 'START_GAME') {
+            const r2 = rooms.get(gameId);
+            if (!r2) return;
+            const occupied = r2.players.filter(Boolean).length;
+            if (!r2.game && occupied === NUM_PLAYERS) {
+                console.log(`[${gameId}] START_GAME received. Starting game.`);
+                r2.game = new Game();
+                broadcastGameState(gameId);
+            } else {
+                // Re-broadcast lobby in case a client needs refresh
+                broadcastPlayerCount(gameId);
+            }
             return;
         }
 
@@ -571,13 +580,8 @@ function addBotToRoom(gameId, difficulty = 'medium') {
     room.playerNames[botIndex] = `Bot ${botIndex + 1}`;
     room.botDifficulty[botIndex] = ['easy','medium','hard'].includes(difficulty) ? difficulty : 'medium';
     console.log(`[${gameId}] Bot added in slot ${botIndex + 1}.`);
-    if (room.players.filter(Boolean).length === NUM_PLAYERS) {
-        console.log(`[${gameId}] Room full (including bots). Starting game.`);
-        room.game = new Game();
-        broadcastGameState(gameId);
-    } else {
-        broadcastPlayerCount(gameId);
-    }
+    // Do not auto-start; wait for START_GAME
+    broadcastPlayerCount(gameId);
 }
 
 function replaceSeatWithBot(gameId, seat, difficulty = 'medium') {
@@ -601,13 +605,8 @@ function replaceSeatWithBot(gameId, seat, difficulty = 'medium') {
     console.log(`[${gameId}] Replaced seat ${seat + 1} with a bot (${room.botDifficulty[seat]}).`);
     // Close the old connection (this should not affect the array as we already replaced it)
     try { existing && typeof existing.close === 'function' && existing.close(1000, 'Replaced by bot'); } catch {}
-    if (room.players.length === NUM_PLAYERS) {
-        // If room reaches 4 seats, start game
-        room.game = new Game();
-        broadcastGameState(gameId);
-    } else {
-        broadcastPlayerCount(gameId);
-    }
+    // Do not auto-start; wait for START_GAME
+    broadcastPlayerCount(gameId);
 }
 
 function addBotAtSeat(gameId, seat, difficulty = 'medium') {
@@ -622,12 +621,8 @@ function addBotAtSeat(gameId, seat, difficulty = 'medium') {
     room.playerNames[seat] = `Bot ${seat + 1}`;
     room.botDifficulty[seat] = ['easy','medium','hard'].includes(difficulty) ? difficulty : 'medium';
     console.log(`[${gameId}] Added bot at seat ${seat + 1} (${room.botDifficulty[seat]}).`);
-    if (room.players.filter(Boolean).length === NUM_PLAYERS) {
-        room.game = new Game();
-        broadcastGameState(gameId);
-    } else {
-        broadcastPlayerCount(gameId);
-    }
+    // Do not auto-start; wait for START_GAME
+    broadcastPlayerCount(gameId);
 }
 
 function isBotPlayer(gameId, idx) {

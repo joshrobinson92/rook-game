@@ -64,11 +64,15 @@ function connectToGame(gameId) {
                 myPlayerIndex = data.playerIndex;
                 break;
             case 'playerCount':
+                const canStart = (data.count >= 4);
                 gameDiv.innerHTML = `
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
                         <div>
                             <h2 style="margin:0;">Game ID: ${currentGameId}</h2>
                             <h3 style="margin:4px 0 0 0;">Waiting for players... ${data.count}/${data.required}</h3>
+                        </div>
+                        <div>
+                            ${canStart ? '<button id="start-game-btn" style="padding:8px 12px;border-radius:6px;border:0;background:#4caf50;color:#fff;cursor:pointer;">Start Game</button>' : ''}
                         </div>
                     </div>
                     ${renderSeatControls(data)}
@@ -152,6 +156,12 @@ function renderSeatControls(data) {
 
 function wireLobbyControls(_data) {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const startBtn = document.getElementById('start-game-btn');
+    if (startBtn) {
+        startBtn.addEventListener('click', () => {
+            ws.send(JSON.stringify({ type: 'START_GAME' }));
+        });
+    }
     document.querySelectorAll('.seat-add-bot').forEach(btn => {
         btn.addEventListener('click', () => {
             const seat = parseInt(btn.dataset.seat, 10);
