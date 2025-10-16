@@ -64,7 +64,8 @@ function connectToGame(gameId) {
                 myPlayerIndex = data.playerIndex;
                 break;
             case 'playerCount':
-                const canStart = (data.count >= 4);
+                // Allow starting with at least 2 humans; server will auto-fill remaining seats with bots
+                const canStart = (data.count >= 2);
                 gameDiv.innerHTML = `
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
                         <div>

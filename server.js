@@ -552,14 +552,25 @@ wss.on('connection', (ws, req) => {
             const r2 = rooms.get(gameId);
             if (!r2) return;
             const occupied = r2.players.filter(Boolean).length;
-            if (!r2.game && occupied === NUM_PLAYERS) {
-                console.log(`[${gameId}] START_GAME received. Starting game.`);
-                r2.hostIndex = playerIndex;
-                r2.game = new Game();
-                broadcastGameState(gameId);
+            if (!r2.game) {
+                if (occupied >= 2) {
+                    // Auto-fill empty seats with bots so a game can start with fewer humans
+                    for (let i = 0; i < NUM_PLAYERS; i++) {
+                        if (!r2.players[i]) {
+                            addBotAtSeat(gameId, i, r2.botDifficulty[i] || 'medium');
+                        }
+                    }
+                    console.log(`[${gameId}] START_GAME received. Starting game with ${occupied} humans and ${NUM_PLAYERS - occupied} bots.`);
+                    r2.hostIndex = playerIndex;
+                    r2.game = new Game();
+                    broadcastGameState(gameId);
+                } else {
+                    // Not enough players to start; refresh lobby
+                    broadcastPlayerCount(gameId);
+                }
             } else {
-                // Re-broadcast lobby in case a client needs refresh
-                broadcastPlayerCount(gameId);
+                // Game already running; refresh state
+                broadcastGameState(gameId);
             }
             return;
         }
