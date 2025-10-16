@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rook Card Game</title>
+  <link rel="stylesheet" href="styles/style.css">
+</head>
+<body>
+  <h1>Rook Card Game</h1>
+  <div id="settings-bar" style="max-width:1100px;margin:0 auto 12px auto;padding:8px 0;display:flex;flex-wrap:wrap;align-items:center;gap:16px;justify-content:center;background:#222;border-radius:8px;">
+    <label style="color:#ffd54f;font-weight:bold;">Card Size:
+      <input id="card-size-slider" type="range" min="40" max="90" value="60" style="vertical-align:middle;">
+    </label>
+    <label style="color:#ffd54f;font-weight:bold;">
+      <input id="stacked-toggle" type="checkbox" style="vertical-align:middle;"> Stacked/Fanned Layout
+    </label>
+    <label style="color:#ffd54f;font-weight:bold;">
+      Name:
+      <input id="player-name-input" type="text" maxlength="16" style="vertical-align:middle;width:120px;">
+    </label>
+  </div>
+  <div id="game"></div>
+  <script type="module" src="scripts/main.js"></script>
+</body>
+</html>

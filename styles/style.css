@@ -1,0 +1,44 @@
+body { font-family: sans-serif; background: #222; color: #eee; }
+h1 { text-align: center; }
+#game { margin: 0 auto; max-width: 900px; padding: 20px; background: #333; border-radius: 12px; }
+.player-area { margin-bottom: 24px; padding: 12px; background: #444; border-radius: 8px; }
+.hand { display: flex; gap: 8px; margin-top: 8px; }
+.card {
+	display: inline-block;
+	width: 60px;
+	height: 90px;
+	margin: 4px;
+	padding: 8px;
+	border: 2px solid #333;
+	border-radius: 8px;
+	background: #fff;
+	text-align: center;
+	font-size: 18px;
+	cursor: pointer;
+	box-shadow: 1px 2px 6px rgba(0,0,0,0.12);
+}
+
+/* Highlight active player area */
+.active-player {
+	border: 3px solid #0077ff;
+	background: #e6f2ff;
+	box-shadow: 0 0 10px #0077ff44;
+}
+
+/* Prompt above hand */
+.play-prompt {
+	margin-bottom: 6px;
+	font-weight: bold;
+	color: #0077ff;
+	font-size: 1.1em;
+}
+.card.special { background: gold; color: #222; border: 2px solid #c90; }
+.selected-card {
+	outline: 3px solid #ff6600;
+	box-shadow: 0 0 8px #ff6600;
+}
+.widow { display: flex; gap: 8px; margin: 16px 0; justify-content: center; }
+.bidding { margin: 16px 0; }
+.bid-btn, .pass-btn { margin: 0 4px; padding: 6px 12px; font-size: 1em; border-radius: 4px; border: none; background: #666; color: #fff; cursor: pointer; }
+.bid-btn:hover, .pass-btn:hover { background: #888; }
+.discard-area { margin: 16px 0; }
