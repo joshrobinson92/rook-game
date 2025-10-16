@@ -477,19 +477,19 @@ wss.on('connection', (ws, req) => {
     const url = new URL(req.url, 'http://localhost');
     const gameId = url.searchParams.get('game') || 'default';
 
+    // Ensure room exists and is initialized
     if (!rooms.has(gameId)) {
-        rooms.set(gameId, { players: [], game: null, playerNames: [], botDifficulty: {}, hostIndex: null });
+        rooms.set(gameId, {
+            players: Array(NUM_PLAYERS).fill(null), // Initialize with nulls
+            game: null,
+            playerNames: Array(NUM_PLAYERS).fill(null),
+            botDifficulty: {},
+            hostIndex: null
+        });
     }
     const room = rooms.get(gameId);
 
-    // If the room is new, initialize the player slots.
-    if (room.players.length === 0) {
-        for (let i = 0; i < NUM_PLAYERS; i++) {
-            room.players.push(null);
-        }
-    }
-
-    // Find an empty seat. If a player disconnects, their seat becomes null.
+    // Find an empty seat.
     const playerIndex = room.players.findIndex(p => p === null);
 
     // If no empty seat is found, the game is full.
@@ -501,15 +501,15 @@ wss.on('connection', (ws, req) => {
 
     // Assign the player to the found seat
     room.players[playerIndex] = ws;
-    // Initialize default name for this player index
+    // Initialize default name for this player index if not already set
     if (!room.playerNames[playerIndex]) {
         room.playerNames[playerIndex] = `Player ${playerIndex + 1}`;
     }
-    console.log(`[${gameId}] Player ${playerIndex + 1} connected.`);
+    console.log(`[${gameId}] Player ${playerIndex + 1} connected to seat ${playerIndex}.`);
 
     ws.send(JSON.stringify({ type: 'welcome', playerIndex }));
 
-    // Show lobby status; game starts when a client sends START_GAME
+    // Show lobby status
     broadcastPlayerCount(gameId);
 
     ws.on('message', (message) => {
@@ -615,18 +615,23 @@ wss.on('connection', (ws, req) => {
     });
 
     ws.on('close', () => {
-        console.log(`[${gameId}] Player ${playerIndex + 1} disconnected.`);
+        console.log(`[${gameId}] Player ${playerIndex + 1} disconnected from seat ${playerIndex}.`);
         const r = rooms.get(gameId);
         if (!r) return;
         // Mark this seat empty but preserve seating
         if (r.players[playerIndex] === ws) {
             r.players[playerIndex] = null;
+            // Also clear their name so the lobby slot appears fully open
+            r.playerNames[playerIndex] = null;
         }
         // Reset the game on disconnect for simplicity
-        r.game = null;
+        if (r.game) {
+            r.game = null;
+            console.log(`[${gameId}] Game reset due to disconnect.`);
+        }
         broadcastPlayerCount(gameId);
         // Cleanup empty rooms
-        if (r.players.filter(Boolean).length === 0) {
+        if (r.players.every(p => p === null)) {
             rooms.delete(gameId);
             console.log(`[${gameId}] Room deleted (empty).`);
         }
