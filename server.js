@@ -482,6 +482,13 @@ wss.on('connection', (ws, req) => {
     }
     const room = rooms.get(gameId);
 
+    // If the room is new, initialize the player slots.
+    if (room.players.length === 0) {
+        for (let i = 0; i < NUM_PLAYERS; i++) {
+            room.players.push(null);
+        }
+    }
+
     // Find an empty seat. If a player disconnects, their seat becomes null.
     const playerIndex = room.players.findIndex(p => p === null);
 
