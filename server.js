@@ -272,6 +272,23 @@ class Game {
         this.state = 'post_trick';
     }
 
+    advanceAfterTrick() {
+        if (this.state !== 'post_trick' || !this.pendingTrick) return;
+        const { winningPlayer, winningTeam } = this.pendingTrick;
+        // Move completed trick to the winner's pile
+        this.tricksWon[winningTeam].push([...this.trick]);
+        this.trickLeader = winningPlayer;
+        // Clear the table
+        this.trick = [];
+        this.pendingTrick = null;
+        // If hands are empty, score the hand; otherwise resume play
+        if (this.hands.every(h => h.length === 0)) {
+            this.scoreHand();
+        } else {
+            this.state = 'play';
+        }
+    }
+
     scoreHand() {
         this.state = 'score';
         let teamPoints = { 'Team A': 0, 'Team B': 0 };
@@ -446,7 +463,7 @@ wss.on('connection', (ws, req) => {
     const gameId = url.searchParams.get('game') || 'default';
 
     if (!rooms.has(gameId)) {
-        rooms.set(gameId, { players: [], game: null, playerNames: [], botDifficulty: {} });
+        rooms.set(gameId, { players: [], game: null, playerNames: [], botDifficulty: {}, hostIndex: null });
     }
     const room = rooms.get(gameId);
 
@@ -518,11 +535,24 @@ wss.on('connection', (ws, req) => {
             const occupied = r2.players.filter(Boolean).length;
             if (!r2.game && occupied === NUM_PLAYERS) {
                 console.log(`[${gameId}] START_GAME received. Starting game.`);
+                r2.hostIndex = playerIndex;
                 r2.game = new Game();
                 broadcastGameState(gameId);
             } else {
                 // Re-broadcast lobby in case a client needs refresh
                 broadcastPlayerCount(gameId);
+            }
+            return;
+        }
+
+        if (action.type === 'NEXT_TRICK') {
+            const r2 = rooms.get(gameId);
+            if (!r2 || !r2.game) return;
+            if (r2.game.state === 'post_trick' && r2.hostIndex === playerIndex) {
+                if (typeof r2.game.advanceAfterTrick === 'function') {
+                    r2.game.advanceAfterTrick();
+                    broadcastGameState(gameId);
+                }
             }
             return;
         }
@@ -578,7 +608,7 @@ function broadcastGameState(gameId) {
     const botDiffArr = Array.from({length: room.players.length}, (_, i) => room.botDifficulty[i] || null);
     room.players.forEach((ws, i) => {
         if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'gameState', ...room.game.getStateForPlayer(i), playerNames: room.playerNames, isBot: isBotArr, botDifficulty: botDiffArr }));
+            ws.send(JSON.stringify({ type: 'gameState', ...room.game.getStateForPlayer(i), playerNames: room.playerNames, isBot: isBotArr, botDifficulty: botDiffArr, hostIndex: room.hostIndex }));
         }
     });
     scheduleBotActions(gameId);

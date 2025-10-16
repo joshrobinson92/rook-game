@@ -474,10 +474,11 @@ function render(state) {
                 html += `<div class="called-color-notice">Led Suit: <strong>${state.ledSuit}</strong>${rookLed ? ' (Rook called)' : ''}</div>`;
             }
             html += `</div>`;
-            if (myPlayerIndex === 0) {
+            if (myPlayerIndex === state.hostIndex) {
                 html += `<button id="next-trick-btn" style="margin-top:8px;padding:8px 12px;border-radius:6px;border:0;background:#4caf50;color:#fff;cursor:pointer;">Next Trick</button>`;
             } else {
-                html += `<div style="margin-top:8px;color:#ccc;">Waiting for Player 1 to continue…</div>`;
+                const hostName = (state.playerNames && typeof state.hostIndex === 'number') ? (state.playerNames[state.hostIndex] || `Player ${state.hostIndex+1}`) : 'host';
+                html += `<div style="margin-top:8px;color:#ccc;">Waiting for ${hostName} to continue…</div>`;
             }
             break;
 
@@ -617,7 +618,7 @@ function addEventListeners(state) {
         }
     }
 
-    if (state.gameState === 'post_trick' && myPlayerIndex === 0) {
+    if (state.gameState === 'post_trick' && myPlayerIndex === state.hostIndex) {
         const nextBtn = document.getElementById('next-trick-btn');
         if (nextBtn) nextBtn.onclick = () => sendAction({ type: 'NEXT_TRICK' });
     }
