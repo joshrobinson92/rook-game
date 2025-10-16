@@ -73,6 +73,7 @@ function connectToGame(gameId) {
                     </div>
                     ${renderSeatControls(data)}
                 `;
+                wireLobbyControls(data);
                 break;
             case 'gameState':
                 // Ensure settings bar is shown once in a game
@@ -147,6 +148,26 @@ function renderSeatControls(data) {
             ${seatRow}
         </div>
     `;
+}
+
+function wireLobbyControls(_data) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    document.querySelectorAll('.seat-add-bot').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const seat = parseInt(btn.dataset.seat, 10);
+            const sel = document.querySelector(`.seat-diff[data-seat="${seat}"]`);
+            const diff = (sel && sel.value) || 'medium';
+            ws.send(JSON.stringify({ type: 'ADD_BOT_AT_SEAT', seat, difficulty: diff }));
+        });
+    });
+    document.querySelectorAll('.seat-replace-bot').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const seat = parseInt(btn.dataset.seat, 10);
+            const sel = document.querySelector(`.seat-diff[data-seat="${seat}"]`);
+            const diff = (sel && sel.value) || 'medium';
+            ws.send(JSON.stringify({ type: 'REPLACE_WITH_BOT', seat, difficulty: diff }));
+        });
+    });
 }
 
 function renderLanding() {
@@ -450,21 +471,7 @@ function addEventListeners(state) {
     }
 
     // Lobby: add bot button handler
-    document.querySelectorAll('.seat-add-bot').forEach(btn => {
-        btn.onclick = () => {
-            const seat = parseInt(btn.dataset.seat, 10);
-            const diff = document.querySelector(`.seat-diff[data-seat="${seat}"]`).value;
-            // We add bots sequentially to next slot; server ignores seat param for simplicity
-            ws.send(JSON.stringify({ type: 'ADD_BOT', difficulty: diff }));
-        };
-    });
-    document.querySelectorAll('.seat-replace-bot').forEach(btn => {
-        btn.onclick = () => {
-            const seat = parseInt(btn.dataset.seat, 10);
-            const diff = document.querySelector(`.seat-diff[data-seat="${seat}"]`).value;
-            ws.send(JSON.stringify({ type: 'REPLACE_WITH_BOT', seat, difficulty: diff }));
-        };
-    });
+    // No-op: lobby handlers are attached during playerCount rendering via wireLobbyControls
 
     if (state.gameState === 'reveal' && state.widowOwner === myPlayerIndex) {
         document.getElementById('continue-btn').onclick = () => sendAction({ type: 'CONTINUE_TO_DISCARD' });

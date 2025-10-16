@@ -435,8 +435,15 @@ wss.on('connection', (ws, req) => {
         return;
     }
 
-    const playerIndex = room.players.length;
-    room.players.push(ws);
+    // Fill seats array up to NUM_PLAYERS for consistent indexing
+    while (room.players.length < NUM_PLAYERS) room.players.push(null);
+    const playerIndex = room.players.findIndex(p => p === null);
+    if (playerIndex === -1) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Game is full.' }));
+        ws.close();
+        return;
+    }
+    room.players[playerIndex] = ws;
     // Initialize default name for this player index
     if (!room.playerNames[playerIndex]) {
         room.playerNames[playerIndex] = `Player ${playerIndex + 1}`;
@@ -483,6 +490,12 @@ wss.on('connection', (ws, req) => {
             replaceSeatWithBot(gameId, seat, difficulty);
             return;
         }
+        if (action.type === 'ADD_BOT_AT_SEAT') {
+            const seat = Math.max(0, Math.min(NUM_PLAYERS - 1, parseInt(action.seat, 10)));
+            const difficulty = (action.difficulty || 'medium').toLowerCase();
+            addBotAtSeat(gameId, seat, difficulty);
+            return;
+        }
 
         if (!r.game) return;
         const result = r.game.handleAction(playerIndex, action);
@@ -496,16 +509,15 @@ wss.on('connection', (ws, req) => {
         console.log(`[${gameId}] Player ${playerIndex + 1} disconnected.`);
         const r = rooms.get(gameId);
         if (!r) return;
-        // Remove this socket
-    // Remove this socket and its name at this index
-    r.players = r.players.filter(s => s !== ws);
-    // Keep names array length consistent with players count (optional)
-    r.playerNames = r.playerNames.slice(0, r.players.length);
+        // Mark this seat empty but preserve seating
+        if (r.players[playerIndex] === ws) {
+            r.players[playerIndex] = null;
+        }
         // Reset the game on disconnect for simplicity
         r.game = null;
         broadcastPlayerCount(gameId);
         // Cleanup empty rooms
-        if (r.players.length === 0) {
+        if (r.players.filter(Boolean).length === 0) {
             rooms.delete(gameId);
             console.log(`[${gameId}] Room deleted (empty).`);
         }
@@ -518,7 +530,7 @@ function broadcastGameState(gameId) {
     const isBotArr = room.players.map(p => !!(p && p.isBot));
     const botDiffArr = Array.from({length: room.players.length}, (_, i) => room.botDifficulty[i] || null);
     room.players.forEach((ws, i) => {
-        if (ws.readyState === WebSocket.OPEN) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'gameState', ...room.game.getStateForPlayer(i), playerNames: room.playerNames, isBot: isBotArr, botDifficulty: botDiffArr }));
         }
     });
@@ -537,11 +549,11 @@ function sendToPlayerInRoom(gameId, index, payload) {
 function broadcastPlayerCount(gameId) {
     const room = rooms.get(gameId);
     if (!room) return;
-    const playerCount = room.players.length;
+    const playerCount = room.players.filter(Boolean).length;
     const isBotArr = room.players.map(p => !!(p && p.isBot));
     const botDiffArr = Array.from({length: room.players.length}, (_, i) => room.botDifficulty[i] || null);
     room.players.forEach(ws => {
-        if (ws.readyState === WebSocket.OPEN) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'playerCount', count: playerCount, required: NUM_PLAYERS, playerNames: room.playerNames, isBot: isBotArr, botDifficulty: botDiffArr }));
         }
     });
@@ -551,14 +563,15 @@ function broadcastPlayerCount(gameId) {
 function addBotToRoom(gameId, difficulty = 'medium') {
     const room = rooms.get(gameId);
     if (!room) return;
-    if (room.players.length >= NUM_PLAYERS) return;
-    const botIndex = room.players.length;
+    while (room.players.length < NUM_PLAYERS) room.players.push(null);
+    const botIndex = room.players.findIndex(p => p === null);
+    if (botIndex === -1) return;
     const botSocket = { isBot: true, readyState: WebSocket.OPEN, send: (_msg) => {} };
-    room.players.push(botSocket);
+    room.players[botIndex] = botSocket;
     room.playerNames[botIndex] = `Bot ${botIndex + 1}`;
     room.botDifficulty[botIndex] = ['easy','medium','hard'].includes(difficulty) ? difficulty : 'medium';
     console.log(`[${gameId}] Bot added in slot ${botIndex + 1}.`);
-    if (room.players.length === NUM_PLAYERS) {
+    if (room.players.filter(Boolean).length === NUM_PLAYERS) {
         console.log(`[${gameId}] Room full (including bots). Starting game.`);
         room.game = new Game();
         broadcastGameState(gameId);
@@ -590,6 +603,26 @@ function replaceSeatWithBot(gameId, seat, difficulty = 'medium') {
     try { existing && typeof existing.close === 'function' && existing.close(1000, 'Replaced by bot'); } catch {}
     if (room.players.length === NUM_PLAYERS) {
         // If room reaches 4 seats, start game
+        room.game = new Game();
+        broadcastGameState(gameId);
+    } else {
+        broadcastPlayerCount(gameId);
+    }
+}
+
+function addBotAtSeat(gameId, seat, difficulty = 'medium') {
+    const room = rooms.get(gameId);
+    if (!room) return;
+    if (room.game) return; // Only allow before game starts
+    while (room.players.length < NUM_PLAYERS) room.players.push(null);
+    if (seat < 0 || seat >= NUM_PLAYERS) return;
+    if (room.players[seat]) return; // seat already occupied
+    const botSocket = { isBot: true, readyState: WebSocket.OPEN, send: (_msg) => {} };
+    room.players[seat] = botSocket;
+    room.playerNames[seat] = `Bot ${seat + 1}`;
+    room.botDifficulty[seat] = ['easy','medium','hard'].includes(difficulty) ? difficulty : 'medium';
+    console.log(`[${gameId}] Added bot at seat ${seat + 1} (${room.botDifficulty[seat]}).`);
+    if (room.players.filter(Boolean).length === NUM_PLAYERS) {
         room.game = new Game();
         broadcastGameState(gameId);
     } else {
