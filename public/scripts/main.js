@@ -1,9 +1,11 @@
 const gameDiv = document.getElementById('game');
+const settingsBar = document.getElementById('settings-bar');
 
 // --- Settings Bar Logic ---
 window.addEventListener('DOMContentLoaded', () => {
     const cardSlider = document.getElementById('card-size-slider');
     const stackedToggle = document.getElementById('stacked-toggle');
+    const nameInput = document.getElementById('player-name-input');
     if (cardSlider) {
         cardSlider.value = window.localStorage.getItem('cardSize') || '60';
         cardSlider.addEventListener('input', e => {
@@ -20,50 +22,223 @@ window.addEventListener('DOMContentLoaded', () => {
             if (window.lastState) render(window.lastState);
         });
     }
+    if (nameInput) {
+        nameInput.value = window.localStorage.getItem('playerName') || '';
+        nameInput.addEventListener('input', e => {
+            const val = e.target.value.trim();
+            window.localStorage.setItem('playerName', val);
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'SET_NAME', name: val }));
+            }
+            if (window.lastState) render(window.lastState);
+        });
+    }
 });
 let myPlayerIndex = null;
 let selectedCard = null;
+let ws = null;
+let currentGameId = null;
 
-const ws = new WebSocket(`ws://${window.location.host}`);
+function connectToGame(gameId) {
+    currentGameId = gameId;
+    // Build WebSocket URL supporting Render/HTTPS and game rooms via ?game=ID
+    const isSecure = window.location.protocol === 'https:';
+    const proto = isSecure ? 'wss' : 'ws';
+    ws = new WebSocket(`${proto}://${window.location.host}/?game=${encodeURIComponent(gameId)}`);
 
-ws.onopen = () => {
-    console.log('Connected to the server.');
-    gameDiv.innerHTML = '<h2>Waiting for server...</h2>';
-};
+    ws.onopen = () => {
+        console.log('Connected to the server.');
+        gameDiv.innerHTML = '<h2>Waiting for server...</h2>';
+        const initialName = window.localStorage.getItem('playerName');
+        if (initialName) {
+            ws.send(JSON.stringify({ type: 'SET_NAME', name: initialName }));
+        }
+    };
 
-ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    console.log('Received from server:', data);
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        console.log('Received from server:', data);
 
-    switch (data.type) {
-        case 'welcome':
-            myPlayerIndex = data.playerIndex;
-            break;
-        case 'playerCount':
-            gameDiv.innerHTML = `<h2>Waiting for players... ${data.count}/${data.required}</h2>`;
-            break;
-        case 'gameState':
-            render(data);
-            break;
-        case 'error':
-            gameDiv.innerHTML = `<h2>Error: ${data.message}</h2>`;
-            break;
-        case 'notify':
-            // Show notification if dedicated area exists; otherwise log it
-            const notifyEl = document.getElementById('notify-area');
-            if (notifyEl) notifyEl.textContent = data.message;
-            break;
-    }
-};
+        switch (data.type) {
+            case 'welcome':
+                myPlayerIndex = data.playerIndex;
+                break;
+            case 'playerCount':
+                gameDiv.innerHTML = `
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                        <div>
+                            <h2 style="margin:0;">Game ID: ${currentGameId}</h2>
+                            <h3 style="margin:4px 0 0 0;">Waiting for players... ${data.count}/${data.required}</h3>
+                        </div>
+                    </div>
+                    ${renderSeatControls(data)}
+                `;
+                break;
+            case 'gameState':
+                // Ensure settings bar is shown once in a game
+                if (settingsBar) settingsBar.style.display = '';
+                render(data);
+                break;
+            case 'error':
+                gameDiv.innerHTML = `<h2>Error: ${data.message}</h2>`;
+                break;
+            case 'notify':
+                // Show notification if dedicated area exists; otherwise log it
+                const notifyEl = document.getElementById('notify-area');
+                if (notifyEl) notifyEl.textContent = data.message;
+                break;
+        }
+    };
 
-ws.onclose = () => {
-    console.log('Disconnected from the server.');
-    gameDiv.innerHTML = '<h2>Disconnected. Please refresh to rejoin.</h2>';
-};
+    ws.onclose = () => {
+        console.log('Disconnected from the server.');
+        gameDiv.innerHTML = '<h2>Disconnected. Please refresh to rejoin.</h2>';
+    };
+}
 
 function sendAction(action) {
-    ws.send(JSON.stringify(action));
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(action));
+    }
 }
+
+function renderWaitingList(playerNames = []) {
+    const names = (playerNames || []).map((n, i) => n || `Player ${i + 1}`);
+    if (!names.length) return '';
+    return `
+        <div style="margin-top:10px; font-size:14px; color:#ccc;">
+            Players: ${names.map(n => `<span style='display:inline-block;margin-right:8px;'>${n}</span>`).join('')}
+        </div>
+    `;
+}
+
+function renderSeatControls(data) {
+    const names = data.playerNames || [];
+    const isBot = data.isBot || [];
+    const botDifficulty = data.botDifficulty || [];
+    const seats = Array.from({ length: 4 }, (_, i) => i);
+    const seatRow = seats.map(i => {
+        const status = names[i] ? (isBot[i] ? 'Bot' : 'Human') : 'Empty';
+        const diff = botDifficulty[i] || 'medium';
+        const controls = status === 'Empty' ? `
+            <select class="seat-diff" data-seat="${i}" style="padding:6px;border-radius:6px;border:1px solid #444;background:#111;color:#eee;">
+                <option value="easy">Easy</option>
+                <option value="medium" ${diff==='medium'?'selected':''}>Medium</option>
+                <option value="hard" ${diff==='hard'?'selected':''}>Hard</option>
+            </select>
+            <button class="seat-add-bot" data-seat="${i}" style="padding:6px 10px;border-radius:6px;border:0;background:#795548;color:#fff;cursor:pointer;">Add Bot</button>
+        ` : (isBot[i] ? `<span style="font-size:12px;color:#bbb;">${diff[0].toUpperCase()+diff.slice(1)}</span>` : `
+            <select class="seat-diff" data-seat="${i}" style="padding:6px;border-radius:6px;border:1px solid #444;background:#111;color:#eee;">
+                <option value="easy">Easy</option>
+                <option value="medium" ${diff==='medium'?'selected':''}>Medium</option>
+                <option value="hard" ${diff==='hard'?'selected':''}>Hard</option>
+            </select>
+            <button class="seat-replace-bot" data-seat="${i}" style="padding:6px 10px;border-radius:6px;border:0;background:#9e9e9e;color:#111;cursor:pointer;">Replace with Bot</button>
+        `);
+        return `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;background:#222;border-radius:8px;">
+                <div><strong>Seat ${i+1}:</strong> ${names[i] || '—'} <span style="color:#aaa">(${status})</span></div>
+                <div>${controls}</div>
+            </div>
+        `;
+    }).join('');
+    return `
+        <div style="margin-top:10px; display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:8px;">
+            ${seatRow}
+        </div>
+    `;
+}
+
+function renderLanding() {
+    if (settingsBar) settingsBar.style.display = 'none';
+    const suggested = generateGameId();
+    gameDiv.innerHTML = `
+        <div class="landing" style="max-width:520px;margin:24px auto;padding:16px;border-radius:10px;background:#1f1f1f;color:#eee;">
+            <h2 style="margin-top:0">Start or Join a Game</h2>
+            <div style="margin:12px 0;padding:12px;background:#2a2a2a;border-radius:8px;">
+                <div style="margin-bottom:8px;font-weight:600;">Create Game</div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <input id="create-game-id" type="text" value="${suggested}" maxlength="24" style="flex:1;padding:8px;border-radius:6px;border:1px solid #444;background:#111;color:#eee;">
+                    <button id="create-game-btn" style="padding:8px 12px;border-radius:6px;border:0;background:#4caf50;color:#fff;cursor:pointer;">Create</button>
+                </div>
+                <div style="font-size:12px;color:#aaa;margin-top:6px;">Use the suggested ID or enter your own (share this with friends).</div>
+                <div id="share-row" style="margin-top:8px; display:none; align-items:center; gap:8px;">
+                    <input id="share-link" type="text" readonly style="flex:1;padding:8px;border-radius:6px;border:1px solid #444;background:#111;color:#eee;">
+                    <button id="copy-link-btn" style="padding:8px 12px;border-radius:6px;border:0;background:#9c27b0;color:#fff;cursor:pointer;">Copy Link</button>
+                </div>
+            </div>
+            <div style="margin:12px 0;padding:12px;background:#2a2a2a;border-radius:8px;">
+                <div style="margin-bottom:8px;font-weight:600;">Join Game</div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <input id="join-game-id" type="text" placeholder="Enter Game ID" maxlength="24" style="flex:1;padding:8px;border-radius:6px;border:1px solid #444;background:#111;color:#eee;">
+                    <button id="join-game-btn" style="padding:8px 12px;border-radius:6px;border:0;background:#2196f3;color:#fff;cursor:pointer;">Join</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const createBtn = document.getElementById('create-game-btn');
+    const createInput = document.getElementById('create-game-id');
+    const joinBtn = document.getElementById('join-game-btn');
+    const joinInput = document.getElementById('join-game-id');
+
+    const goTo = (id) => {
+        const clean = (id || '').trim();
+        if (!clean) return;
+        const url = new URL(window.location.href);
+        url.searchParams.set('game', clean);
+        window.location.href = url.toString();
+    };
+
+    createBtn.onclick = () => goTo(createInput.value);
+    joinBtn.onclick = () => goTo(joinInput.value);
+
+    // Show share link for convenience when focusing Create Game
+    createInput.addEventListener('input', () => updateShareRow());
+    createInput.addEventListener('focus', () => updateShareRow());
+    function updateShareRow() {
+        const clean = (createInput.value || '').trim();
+        const row = document.getElementById('share-row');
+        const shareInput = document.getElementById('share-link');
+        if (!clean) { row.style.display = 'none'; return; }
+        const u = new URL(window.location.href);
+        u.searchParams.set('game', clean);
+        shareInput.value = u.toString();
+        row.style.display = 'flex';
+    }
+    const copyBtn = document.getElementById('copy-link-btn');
+    copyBtn.onclick = async () => {
+        const shareInput = document.getElementById('share-link');
+        try {
+            await navigator.clipboard.writeText(shareInput.value);
+            copyBtn.textContent = 'Copied!';
+            setTimeout(() => copyBtn.textContent = 'Copy Link', 1200);
+        } catch (e) {
+            shareInput.select();
+            document.execCommand('copy');
+            copyBtn.textContent = 'Copied!';
+            setTimeout(() => copyBtn.textContent = 'Copy Link', 1200);
+        }
+    };
+}
+
+function generateGameId() {
+    const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const digits = '23456789';
+    const pick = (src, n) => Array.from({length:n},()=>src[Math.floor(Math.random()*src.length)]).join('');
+    return `${pick(letters,4)}-${pick(digits,2)}${pick(letters,1)}`;
+}
+
+// Entry: decide whether to show landing or connect
+(() => {
+    const params = new URLSearchParams(window.location.search);
+    const gid = params.get('game');
+    if (gid) {
+        connectToGame(gid);
+    } else {
+        renderLanding();
+    }
+})();
 
 // --- Rendering Logic ---
 function groupAndSortHand(hand) {
@@ -109,12 +284,8 @@ function getTeam(playerIdx) {
 
 let lastState = null; // Cache the last state for re-rendering
 function render(state) {
-    function getPlayerName(idx) {
-        if (idx === myPlayerIndex) {
-            return window.localStorage.getItem('playerName') || `Player ${idx + 1}`;
-        }
-        return `Player ${idx + 1}`;
-    }
+    const names = state.playerNames || [];
+    const getPlayerName = (idx) => names[idx] || `Player ${idx + 1}`;
     lastState = state; window.lastState = state;
     let html = '';
 
@@ -124,8 +295,15 @@ function render(state) {
     document.documentElement.style.setProperty('--card-width', `${cardSize}px`);
     document.documentElement.style.setProperty('--card-height', `${Math.round(cardSize*1.5)}px`);
 
-    // Always show scores
+    // In-game header with share link
     html += `
+        <div class="ingame-header" style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
+            <div>Game ID: <strong>${currentGameId || ''}</strong></div>
+            <div style="display:flex;gap:6px;align-items:center;">
+                <input id="ingame-share" type="text" readonly value="${buildShareUrl(currentGameId)}" style="width:240px;padding:6px;border-radius:6px;border:1px solid #444;background:#111;color:#eee;">
+                <button id="ingame-copy" style="padding:6px 10px;border-radius:6px;border:0;background:#9c27b0;color:#fff;cursor:pointer;">Copy Link</button>
+            </div>
+        </div>
         <div class="scores">
             <strong>Scores:</strong> 
             Team A: ${state.teamScores['Team A']} | 
@@ -271,6 +449,23 @@ function addEventListeners(state) {
         document.querySelector('.pass-btn').onclick = () => sendAction({ type: 'BID', amount: null });
     }
 
+    // Lobby: add bot button handler
+    document.querySelectorAll('.seat-add-bot').forEach(btn => {
+        btn.onclick = () => {
+            const seat = parseInt(btn.dataset.seat, 10);
+            const diff = document.querySelector(`.seat-diff[data-seat="${seat}"]`).value;
+            // We add bots sequentially to next slot; server ignores seat param for simplicity
+            ws.send(JSON.stringify({ type: 'ADD_BOT', difficulty: diff }));
+        };
+    });
+    document.querySelectorAll('.seat-replace-bot').forEach(btn => {
+        btn.onclick = () => {
+            const seat = parseInt(btn.dataset.seat, 10);
+            const diff = document.querySelector(`.seat-diff[data-seat="${seat}"]`).value;
+            ws.send(JSON.stringify({ type: 'REPLACE_WITH_BOT', seat, difficulty: diff }));
+        };
+    });
+
     if (state.gameState === 'reveal' && state.widowOwner === myPlayerIndex) {
         document.getElementById('continue-btn').onclick = () => sendAction({ type: 'CONTINUE_TO_DISCARD' });
     }
@@ -370,5 +565,33 @@ function addEventListeners(state) {
 
     if (state.gameState === 'score') {
         document.getElementById('deal-again-btn').onclick = () => sendAction({ type: 'DEAL_AGAIN' });
+    }
+
+    // In-game copy link
+    const copyBtn = document.getElementById('ingame-copy');
+    const shareInput = document.getElementById('ingame-share');
+    if (copyBtn && shareInput) {
+        copyBtn.onclick = async () => {
+            try {
+                await navigator.clipboard.writeText(shareInput.value);
+                copyBtn.textContent = 'Copied!';
+                setTimeout(() => copyBtn.textContent = 'Copy Link', 1200);
+            } catch (e) {
+                shareInput.select();
+                document.execCommand('copy');
+                copyBtn.textContent = 'Copied!';
+                setTimeout(() => copyBtn.textContent = 'Copy Link', 1200);
+            }
+        };
+    }
+}
+
+function buildShareUrl(gameId) {
+    try {
+        const u = new URL(window.location.href);
+        u.searchParams.set('game', gameId || '');
+        return u.toString();
+    } catch {
+        return window.location.href;
     }
 }

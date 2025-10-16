@@ -19,8 +19,8 @@ const WIDOW_SIZE = 5;
 const VALID_NUMBERS = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
 
 // --- Game State ---
-let players = [];
-let game = null;
+// Rooms keyed by gameId: { players: WebSocket[], game: Game|null }
+const rooms = new Map();
 
 class Game {
     constructor() {
@@ -93,13 +93,14 @@ class Game {
                 }
                 break;
             case 'CHECK_200':
-                // Allow check during discard or trump by widowOwner
+                // NOTE: sendToPlayer is room-scoped now; the caller should handle notifying the player.
+                // This branch will only compute and return a result via a new message type handled outside.
+                // We'll attach the result to the action for the outer handler to send.
                 if ((this.state === 'discard' || this.state === 'trump') && playerIndex === this.widowOwner) {
                     const zeroOppPts = this.canForceZeroOpponentPoints(action.suit);
-                    const msg = zeroOppPts
+                    return { notify: zeroOppPts
                         ? `Opponents can be held to 0 points with trump ${action.suit}.`
-                        : `Opponents may be able to score points with trump ${action.suit}.`;
-                    sendToPlayer(playerIndex, { type: 'notify', message: msg });
+                        : `Opponents may be able to score points with trump ${action.suit}.` };
                 }
                 break;
             case 'CALL_ROOK_COLOR':
@@ -225,7 +226,7 @@ class Game {
         let winningCard = this.trick[0].card;
         // The led suit is either the called color for a Rook, or the card's own color.
         const ledSuit = this.trick[0].calledColor || winningCard.color;
-        let rookPlayed = this.trick.some(play => play.card === ROOK_CARD);
+    let rookPlayed = this.trick.some(play => play.card === ROOK_CARD);
 
         if (rookPlayed) {
             winningIdx = this.trick.findIndex(play => play.card === ROOK_CARD);
@@ -271,7 +272,7 @@ class Game {
             }
         }
 
-        const biddingTeam = this.getTeam(this.widowOwner);
+    const biddingTeam = this.getTeam(this.widowOwner);
         for (const card of this.discarded) {
             teamPoints[biddingTeam] += this.getCardPoints(card);
         }
@@ -417,69 +418,447 @@ class Game {
     }
 }
 
-// --- WebSocket Server Logic ---
-wss.on('connection', (ws) => {
-    if (players.length >= NUM_PLAYERS) {
+// --- WebSocket Server Logic with Rooms ---
+wss.on('connection', (ws, req) => {
+    // Parse gameId from query string
+    const url = new URL(req.url, 'http://localhost');
+    const gameId = url.searchParams.get('game') || 'default';
+
+    if (!rooms.has(gameId)) {
+        rooms.set(gameId, { players: [], game: null, playerNames: [], botDifficulty: {} });
+    }
+    const room = rooms.get(gameId);
+
+    if (room.players.length >= NUM_PLAYERS) {
         ws.send(JSON.stringify({ type: 'error', message: 'Game is full.' }));
         ws.close();
         return;
     }
 
-    const playerIndex = players.length;
-    players.push(ws);
-    console.log(`Player ${playerIndex + 1} connected.`);
+    const playerIndex = room.players.length;
+    room.players.push(ws);
+    // Initialize default name for this player index
+    if (!room.playerNames[playerIndex]) {
+        room.playerNames[playerIndex] = `Player ${playerIndex + 1}`;
+    }
+    console.log(`[${gameId}] Player ${playerIndex + 1} connected.`);
 
     ws.send(JSON.stringify({ type: 'welcome', playerIndex }));
 
-    // Start game when full
-    if (players.length === NUM_PLAYERS) {
-        console.log('All players connected. Starting game.');
-        game = new Game();
-        broadcastGameState();
+    // Start game when room is full
+    if (room.players.length === NUM_PLAYERS) {
+        console.log(`[${gameId}] All players connected. Starting game.`);
+        room.game = new Game();
+        broadcastGameState(gameId);
     } else {
-        broadcastPlayerCount();
+        broadcastPlayerCount(gameId);
     }
 
     ws.on('message', (message) => {
-        if (!game) return;
+        const r = rooms.get(gameId);
+        if (!r) return;
         const action = JSON.parse(message);
-        game.handleAction(playerIndex, action);
-        broadcastGameState();
+        // Handle non-game actions (room-level)
+        if (action.type === 'SET_NAME') {
+            let name = (action.name || '').toString().trim();
+            if (name.length > 16) name = name.slice(0, 16);
+            if (!name) name = `Player ${playerIndex + 1}`;
+            r.playerNames[playerIndex] = name;
+            // Update waiting or in-game state so others see the new name
+            if (r.game && r.game.state !== 'waiting') {
+                broadcastGameState(gameId);
+            } else {
+                broadcastPlayerCount(gameId);
+            }
+            return;
+        }
+        if (action.type === 'ADD_BOT') {
+            const difficulty = (action.difficulty || 'medium').toLowerCase();
+            addBotToRoom(gameId, difficulty);
+            return;
+        }
+        if (action.type === 'REPLACE_WITH_BOT') {
+            const seat = Math.max(0, Math.min(NUM_PLAYERS - 1, parseInt(action.seat, 10)));
+            const difficulty = (action.difficulty || 'medium').toLowerCase();
+            replaceSeatWithBot(gameId, seat, difficulty);
+            return;
+        }
+
+        if (!r.game) return;
+        const result = r.game.handleAction(playerIndex, action);
+        if (result && result.notify) {
+            sendToPlayerInRoom(gameId, playerIndex, { type: 'notify', message: result.notify });
+        }
+        broadcastGameState(gameId);
     });
 
     ws.on('close', () => {
-        console.log(`Player ${playerIndex + 1} disconnected.`);
-        // Simple reset for now. A real implementation would handle reconnects.
-        players = [];
-        game = null;
-        console.log('Game reset due to disconnection.');
-        broadcastPlayerCount();
+        console.log(`[${gameId}] Player ${playerIndex + 1} disconnected.`);
+        const r = rooms.get(gameId);
+        if (!r) return;
+        // Remove this socket
+    // Remove this socket and its name at this index
+    r.players = r.players.filter(s => s !== ws);
+    // Keep names array length consistent with players count (optional)
+    r.playerNames = r.playerNames.slice(0, r.players.length);
+        // Reset the game on disconnect for simplicity
+        r.game = null;
+        broadcastPlayerCount(gameId);
+        // Cleanup empty rooms
+        if (r.players.length === 0) {
+            rooms.delete(gameId);
+            console.log(`[${gameId}] Room deleted (empty).`);
+        }
     });
 });
 
-function broadcastGameState() {
-    if (!game) return;
-    players.forEach((ws, i) => {
+function broadcastGameState(gameId) {
+    const room = rooms.get(gameId);
+    if (!room || !room.game) return;
+    const isBotArr = room.players.map(p => !!(p && p.isBot));
+    const botDiffArr = Array.from({length: room.players.length}, (_, i) => room.botDifficulty[i] || null);
+    room.players.forEach((ws, i) => {
         if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'gameState', ...game.getStateForPlayer(i) }));
+            ws.send(JSON.stringify({ type: 'gameState', ...room.game.getStateForPlayer(i), playerNames: room.playerNames, isBot: isBotArr, botDifficulty: botDiffArr }));
         }
     });
+    scheduleBotActions(gameId);
 }
 
-function sendToPlayer(index, payload) {
-    const ws = players[index];
+function sendToPlayerInRoom(gameId, index, payload) {
+    const room = rooms.get(gameId);
+    if (!room) return;
+    const ws = room.players[index];
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(payload));
     }
 }
 
-function broadcastPlayerCount() {
-    const playerCount = players.length;
-    players.forEach(ws => {
+function broadcastPlayerCount(gameId) {
+    const room = rooms.get(gameId);
+    if (!room) return;
+    const playerCount = room.players.length;
+    const isBotArr = room.players.map(p => !!(p && p.isBot));
+    const botDiffArr = Array.from({length: room.players.length}, (_, i) => room.botDifficulty[i] || null);
+    room.players.forEach(ws => {
         if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'playerCount', count: playerCount, required: NUM_PLAYERS }));
+            ws.send(JSON.stringify({ type: 'playerCount', count: playerCount, required: NUM_PLAYERS, playerNames: room.playerNames, isBot: isBotArr, botDifficulty: botDiffArr }));
         }
     });
+}
+
+// --- Bot Support ---
+function addBotToRoom(gameId, difficulty = 'medium') {
+    const room = rooms.get(gameId);
+    if (!room) return;
+    if (room.players.length >= NUM_PLAYERS) return;
+    const botIndex = room.players.length;
+    const botSocket = { isBot: true, readyState: WebSocket.OPEN, send: (_msg) => {} };
+    room.players.push(botSocket);
+    room.playerNames[botIndex] = `Bot ${botIndex + 1}`;
+    room.botDifficulty[botIndex] = ['easy','medium','hard'].includes(difficulty) ? difficulty : 'medium';
+    console.log(`[${gameId}] Bot added in slot ${botIndex + 1}.`);
+    if (room.players.length === NUM_PLAYERS) {
+        console.log(`[${gameId}] Room full (including bots). Starting game.`);
+        room.game = new Game();
+        broadcastGameState(gameId);
+    } else {
+        broadcastPlayerCount(gameId);
+    }
+}
+
+function replaceSeatWithBot(gameId, seat, difficulty = 'medium') {
+    const room = rooms.get(gameId);
+    if (!room) return;
+    if (room.game) return; // Only allow before game starts
+    if (seat < 0 || seat >= NUM_PLAYERS) return;
+    if (!room.players[seat]) return; // can't replace an empty seat that's not yet created
+    const existing = room.players[seat];
+    if (existing && existing.isBot) {
+        // If it's already a bot, just update difficulty
+        room.botDifficulty[seat] = ['easy','medium','hard'].includes(difficulty) ? difficulty : 'medium';
+        broadcastPlayerCount(gameId);
+        return;
+    }
+    // Replace human socket with a bot at the same index
+    const botSocket = { isBot: true, readyState: WebSocket.OPEN, send: (_msg) => {} };
+    room.players[seat] = botSocket;
+    room.playerNames[seat] = `Bot ${seat + 1}`;
+    room.botDifficulty[seat] = ['easy','medium','hard'].includes(difficulty) ? difficulty : 'medium';
+    console.log(`[${gameId}] Replaced seat ${seat + 1} with a bot (${room.botDifficulty[seat]}).`);
+    // Close the old connection (this should not affect the array as we already replaced it)
+    try { existing && typeof existing.close === 'function' && existing.close(1000, 'Replaced by bot'); } catch {}
+    if (room.players.length === NUM_PLAYERS) {
+        // If room reaches 4 seats, start game
+        room.game = new Game();
+        broadcastGameState(gameId);
+    } else {
+        broadcastPlayerCount(gameId);
+    }
+}
+
+function isBotPlayer(gameId, idx) {
+    const room = rooms.get(gameId);
+    if (!room) return false;
+    const ws = room.players[idx];
+    return !!(ws && ws.isBot);
+}
+
+function getBotDifficulty(gameId, idx) {
+    const room = rooms.get(gameId);
+    if (!room) return 'medium';
+    return room.botDifficulty[idx] || 'medium';
+}
+
+function scheduleBotActions(gameId) {
+    const room = rooms.get(gameId);
+    if (!room || !room.game) return;
+    const g = room.game;
+    const delay = (ms, fn) => setTimeout(fn, ms);
+
+    if (g.state === 'bidding') {
+        const idx = g.currentBidder;
+        if (isBotPlayer(gameId, idx)) {
+            delay(600, () => {
+                const amount = botChooseBid(g, idx, getBotDifficulty(gameId, idx));
+                g.handleAction(idx, { type: 'BID', amount });
+                broadcastGameState(gameId);
+            });
+        }
+        return;
+    }
+
+    if (g.state === 'reveal') {
+        const idx = g.widowOwner;
+        if (isBotPlayer(gameId, idx)) {
+            delay(600, () => {
+                g.handleAction(idx, { type: 'CONTINUE_TO_DISCARD' });
+                broadcastGameState(gameId);
+            });
+        }
+        return;
+    }
+
+    if (g.state === 'discard') {
+        const idx = g.widowOwner;
+        if (isBotPlayer(gameId, idx)) {
+            const need = 5 - g.discarded.length;
+            if (need > 0) {
+                delay(500, () => {
+                    const card = botChooseDiscard(g, getBotDifficulty(gameId, idx));
+                    if (card) {
+                        g.handleAction(idx, { type: 'DISCARD', card });
+                        broadcastGameState(gameId);
+                    }
+                });
+            }
+        }
+        return;
+    }
+
+    if (g.state === 'trump') {
+        const idx = g.widowOwner;
+        if (isBotPlayer(gameId, idx)) {
+            delay(600, () => {
+                const suit = botChooseTrump(g, getBotDifficulty(gameId, idx));
+                g.handleAction(idx, { type: 'CHOOSE_TRUMP', suit });
+                broadcastGameState(gameId);
+            });
+        }
+        return;
+    }
+
+    if (g.state === 'play') {
+        // If leader played Rook and needs to call a color
+        if (g.trick.length === 1 && g.trick[0].card && g.trick[0].card.name === 'Rook' && !g.trick[0].calledColor) {
+            const idx = g.trickLeader;
+            if (isBotPlayer(gameId, idx)) {
+                delay(500, () => {
+                    const color = botChooseColor(g, idx, getBotDifficulty(gameId, idx));
+                    g.handleAction(idx, { type: 'CALL_ROOK_COLOR', color });
+                    broadcastGameState(gameId);
+                });
+            }
+            return;
+        }
+        const idx = g.getCurrentPlayer();
+        if (idx != null && isBotPlayer(gameId, idx)) {
+            delay(700, () => {
+                const card = botChoosePlay(g, idx, getBotDifficulty(gameId, idx));
+                if (card) {
+                    g.handleAction(idx, { type: 'PLAY_CARD', card });
+                    broadcastGameState(gameId);
+                }
+            });
+        }
+        return;
+    }
+}
+
+// --- Bot Strategy Helpers (basic) ---
+function botChooseBid(g, idx, difficulty = 'medium') {
+    const hand = g.hands[idx];
+    const pts = hand.reduce((sum, c) => sum + g.getCardPoints(c), 0);
+    const rookBonus = hand.some(c => c.name === 'Rook') ? 15 : 0;
+    const suitStrength = estimateBestSuitStrength(hand);
+    let offset = 30;
+    if (difficulty === 'easy') offset = 10;
+    if (difficulty === 'hard') offset = 45;
+    let target = pts + rookBonus + offset + Math.round(suitStrength * (difficulty === 'hard' ? 1.5 : difficulty === 'easy' ? 0.5 : 1));
+    target = Math.max(70, Math.min(200, Math.round(target / 5) * 5));
+    if (difficulty === 'easy') {
+        if (pts < 60 || Math.random() < 0.4) return null;
+    } else if (difficulty === 'medium') {
+        if (pts < 40 && Math.random() < 0.6) return null;
+    } else { // hard
+        if (pts < 30 && Math.random() < 0.4) return null;
+    }
+    return target;
+}
+
+function botChooseTrump(g, difficulty = 'medium') {
+    const idx = g.widowOwner;
+    const hand = g.hands[idx] || [];
+    const colors = ['Black','Red','Green','Yellow'];
+    let best = 'Black', bestScore = -1;
+    for (const color of colors) {
+        const nums = hand.filter(c => c.color === color).map(c => c.number || 0);
+        const scoreBase = nums.length * 2 + nums.filter(n => n >= 10).length * 2 + (nums.includes(14) ? 3 : 0);
+        const score = scoreBase + (difficulty === 'hard' ? (nums.includes(13) ? 1 : 0) + (nums.includes(12) ? 1 : 0) : 0);
+        if (score > bestScore) { bestScore = score; best = color; }
+    }
+    if (difficulty === 'easy') {
+        // sometimes pick second-best
+        if (Math.random() < 0.3) {
+            const sorted = colors.map(c => {
+                const nums = hand.filter(x => x.color === c).map(x => x.number || 0);
+                return { c, s: nums.length * 2 + nums.filter(n => n >= 10).length * 2 + (nums.includes(14) ? 3 : 0) };
+            }).sort((a,b)=>b.s-a.s);
+            return sorted[1]?.c || best;
+        }
+    }
+    return best;
+}
+
+function botChooseDiscard(g, difficulty = 'medium') {
+    // Choose lowest-point cards, avoid Rook and likely trump (guess by majority color)
+    const idx = g.widowOwner;
+    const hand = g.widowHand.slice();
+    const counts = countColors(hand);
+    const probableTrump = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
+    hand.sort((a,b)=> (g.getCardPoints(a)-g.getCardPoints(b)) || ((a.number||0)-(b.number||0)) );
+    for (const c of hand) {
+        if (c.name === 'Rook') continue;
+        if (difficulty !== 'easy') {
+            if (probableTrump && c.color === probableTrump && (g.discarded.length < 4)) continue;
+            // Avoid discarding high point cards if possible
+            if (g.getCardPoints(c) >= 10 && hand.length > 6) continue;
+        } else {
+            if (probableTrump && c.color === probableTrump && (g.discarded.length < 3)) continue;
+        }
+        return c;
+    }
+    // fallback: first non-rook
+    return hand.find(c => c.name !== 'Rook') || hand[0];
+}
+
+function botChooseColor(g, idx, difficulty = 'medium') {
+    const hand = g.hands[idx] || [];
+    const counts = countColors(hand);
+    const best = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0]?.[0] || 'Black';
+    if (difficulty === 'easy' && Math.random() < 0.2) {
+        // occasionally pick second best
+        const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+        return sorted[1]?.[0] || best;
+    }
+    return best;
+}
+
+function botChoosePlay(g, idx, difficulty = 'medium') {
+    const hand = g.hands[idx];
+    if (!hand || hand.length === 0) return null;
+    const trick = g.trick;
+    if (trick.length === 0) {
+        // Lead lowest non-trump if possible, avoid Rook early
+        const nonRook = hand.filter(c => c.name !== 'Rook');
+        nonRook.sort((a,b)=> (a.number||0)-(b.number||0));
+        if (difficulty === 'hard') {
+            // try to lead a strong suit (>=12) if available
+            const strong = nonRook.filter(c => (c.number||0) >= 12);
+            if (strong.length) return strong[0];
+        }
+        if (difficulty === 'easy' && Math.random() < 0.3) {
+            // random legal card
+            return nonRook[Math.floor(Math.random()*nonRook.length)] || hand[0];
+        }
+        return nonRook[0] || hand[0];
+    }
+    const ledSuit = trick[0].calledColor || trick[0].card.color;
+    const inSuit = hand.filter(c => c.color === ledSuit && c.name !== 'Rook');
+    if (inSuit.length > 0) {
+        if (difficulty === 'hard') {
+            // try to win cheaply: play lowest that still beats current winning
+            const currentWinning = getCurrentWinningCard(g, ledSuit);
+            const beaters = inSuit.filter(c => c.number > (currentWinning?.number || 0)).sort((a,b)=> (a.number||0)-(b.number||0));
+            if (beaters.length) return beaters[0];
+        }
+        inSuit.sort((a,b)=> (a.number||0)-(b.number||0));
+        if (difficulty === 'easy' && Math.random() < 0.3) return inSuit[Math.floor(Math.random()*inSuit.length)];
+        return inSuit[0];
+    }
+    // If no led suit, try lowest trump else lowest overall (avoid rook unless last)
+    const trumps = hand.filter(c => c.color === g.trumpSuit && c.name !== 'Rook');
+    if (trumps.length > 0) {
+        if (difficulty === 'hard') {
+            // if can win trick with low trump, play lowest trump; else slough lowest
+            const currentWinning = getCurrentWinningCard(g, ledSuit);
+            const beaters = trumps.filter(c => currentWinning && (currentWinning.color !== g.trumpSuit || c.number > (currentWinning.number||0)) ).sort((a,b)=> (a.number||0)-(b.number||0));
+            if (beaters.length) return beaters[0];
+        }
+        trumps.sort((a,b)=> (a.number||0)-(b.number||0));
+        if (difficulty === 'easy' && Math.random() < 0.3) return trumps[Math.floor(Math.random()*trumps.length)];
+        return trumps[0];
+    }
+    const nonRook = hand.filter(c => c.name !== 'Rook');
+    nonRook.sort((a,b)=> (a.number||0)-(b.number||0));
+    if (difficulty === 'easy' && Math.random() < 0.3) return nonRook[Math.floor(Math.random()*nonRook.length)] || hand[0];
+    return nonRook[0] || hand[0];
+}
+
+function countColors(hand) {
+    const counts = { Black:0, Red:0, Green:0, Yellow:0 };
+    for (const c of hand) { if (c && c.color && counts.hasOwnProperty(c.color)) counts[c.color]++; }
+    return counts;
+}
+
+function estimateBestSuitStrength(hand) {
+    const colors = ['Black','Red','Green','Yellow'];
+    let best = 0;
+    for (const color of colors) {
+        const nums = hand.filter(c => c.color === color).map(c => c.number || 0);
+        const score = nums.length * 2 + nums.filter(n => n >= 10).length * 2 + (nums.includes(14) ? 3 : 0);
+        if (score > best) best = score;
+    }
+    return best;
+}
+
+function getCurrentWinningCard(g, ledSuit) {
+    // Compute current winning card for the trick under rook/trump rules
+    let winning = g.trick[0].card;
+    let winningSuit = g.trick[0].calledColor || winning.color;
+    for (let i = 1; i < g.trick.length; i++) {
+        const c = g.trick[i].card;
+        if (c.color === g.trumpSuit && winning.color !== g.trumpSuit) {
+            winning = c; winningSuit = c.color; continue;
+        }
+        if (winning.color !== g.trumpSuit && c.color === ledSuit && winning.color !== ledSuit) {
+            winning = c; winningSuit = c.color; continue;
+        }
+        if (c.color === winning.color && (c.number||0) > (winning.number||0)) {
+            winning = c; winningSuit = c.color; continue;
+        }
+    }
+    return winning;
 }
 
 // Serve static files from 'public' directory
