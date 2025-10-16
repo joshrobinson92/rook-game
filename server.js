@@ -81,7 +81,7 @@ class Game {
                         this.nextBidder();
                     } else {
                         const currentHighest = Math.max(0, ...this.bids.map(b => b || 0));
-                        const isValid = typeof amount === 'number' && amount % 5 === 0 && amount > currentHighest && amount <= 200;
+                        const isValid = typeof amount === 'number' && amount % 5 === 0 && amount > currentHighest && amount <= 100;
                         if (!isValid) {
                             return { notify: `Bid must be higher than ${currentHighest} (in increments of 5).` };
                         }
@@ -741,13 +741,7 @@ function scheduleBotActions(gameId) {
     }
 
     if (g.state === 'reveal') {
-        const idx = g.widowOwner;
-        if (isBotPlayer(gameId, idx)) {
-            delay(600, () => {
-                g.handleAction(idx, { type: 'CONTINUE_TO_DISCARD' });
-                broadcastGameState(gameId);
-            });
-        }
+        // Do not auto-advance; host will click to continue
         return;
     }
 
@@ -817,7 +811,7 @@ function botChooseBid(g, idx, difficulty = 'medium') {
     if (difficulty === 'easy') offset = 10;
     if (difficulty === 'hard') offset = 45;
     let target = pts + rookBonus + offset + Math.round(suitStrength * (difficulty === 'hard' ? 1.5 : difficulty === 'easy' ? 0.5 : 1));
-    target = Math.max(70, Math.min(200, Math.round(target / 5) * 5));
+    target = Math.max(70, Math.min(100, Math.round(target / 5) * 5));
     if (difficulty === 'easy') {
         if (pts < 60 || Math.random() < 0.4) return null;
     } else if (difficulty === 'medium') {

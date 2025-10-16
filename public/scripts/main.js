@@ -361,7 +361,7 @@ function render(state) {
             if (state.currentBidder === myPlayerIndex) {
                 const highest = Math.max(0, ...(state.bids || []).map(b => b || 0));
                 const options = [];
-                for (let bid = highest + 5; bid <= 200; bid += 5) options.push(bid);
+                for (let bid = highest + 5; bid <= 100; bid += 5) options.push(bid);
                 html += `<div class="bidding">Your Bid: 
                     ${options.map(bid => `<button class="bid-btn" data-bid="${bid}">${bid}</button>`).join('')}
                     <button class="pass-btn">Pass</button>
@@ -371,7 +371,8 @@ function render(state) {
 
         case 'reveal':
             html += `<h2>Bid Won!</h2>`;
-            html += `<div><strong>Player ${state.widowOwner + 1}</strong> wins with <strong>${state.bids[state.widowOwner]}</strong>.</div>`;
+            const ownerName = (state.playerNames && state.playerNames[state.widowOwner]) || `Player ${state.widowOwner + 1}`;
+            html += `<div><strong>${ownerName}</strong> wins with <strong>${state.bids[state.widowOwner]}</strong>.</div>`;
             html += `<p>Widow:</p><div class="widow">${state.widow.map(renderCard).join('')}</div>`;
             html += state.allHands.map((hand, i) => `
                 <div class="player-area">
@@ -380,8 +381,12 @@ function render(state) {
                     <div>Bid: ${state.bids[i] !== null ? state.bids[i] : (state.passed[i] ? 'Passed' : '—')}</div>
                 </div>
             `).join('');
-            if (state.widowOwner === myPlayerIndex) {
+            // Host controls continuing after viewing widow
+            if (typeof state.hostIndex === 'number' && state.hostIndex === myPlayerIndex) {
                 html += `<button id="continue-btn">Continue to Discard</button>`;
+            } else {
+                const hostName = (state.playerNames && typeof state.hostIndex === 'number') ? (state.playerNames[state.hostIndex] || `Player ${state.hostIndex+1}`) : 'host';
+                html += `<div style="margin-top:8px;color:#ccc;">Waiting for ${hostName} to continue…</div>`;
             }
             break;
 
@@ -524,7 +529,7 @@ function addEventListeners(state) {
     // Lobby: add bot button handler
     // No-op: lobby handlers are attached during playerCount rendering via wireLobbyControls
 
-    if (state.gameState === 'reveal' && state.widowOwner === myPlayerIndex) {
+    if (state.gameState === 'reveal' && state.hostIndex === myPlayerIndex) {
         document.getElementById('continue-btn').onclick = () => sendAction({ type: 'CONTINUE_TO_DISCARD' });
     }
 
