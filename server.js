@@ -92,23 +92,8 @@ class Game {
                 }
                 break;
             case 'CONTINUE_TO_DISCARD':
-                // Allow host to trigger continue during reveal, even if widowOwner is a bot
-                if (this.state === 'reveal' && (playerIndex === this.widowOwner || (typeof rooms === 'object' && rooms.get)) ) {
-                    // If rooms.get is available, check if playerIndex is host
-                    let isHost = false;
-                    try {
-                        // Find the gameId for this game instance
-                        for (const [gid, room] of rooms.entries()) {
-                            if (room.game === this) {
-                                isHost = room.hostIndex === playerIndex;
-                                break;
-                            }
-                        }
-                    } catch {}
-                    if (playerIndex === this.widowOwner || isHost) {
-                        this.startDiscardPhase();
-                    }
-                }
+                // CONTINUE_TO_DISCARD is handled at the room level so the host
+                // can trigger it even when the widow owner is a bot.
                 break;
             case 'DISCARD':
                 if (this.state === 'discard' && playerIndex === this.widowOwner) {
@@ -571,6 +556,19 @@ wss.on('connection', (ws, req) => {
             } else {
                 // Re-broadcast lobby in case a client needs refresh
                 broadcastPlayerCount(gameId);
+            }
+            return;
+        }
+
+        if (action.type === 'CONTINUE_TO_DISCARD') {
+            const r2 = rooms.get(gameId);
+            if (!r2 || !r2.game) return;
+            if (r2.game.state === 'reveal') {
+                // allow the widow owner or the host to continue
+                if (playerIndex === r2.game.widowOwner || r2.hostIndex === playerIndex) {
+                    r2.game.startDiscardPhase();
+                    broadcastGameState(gameId);
+                }
             }
             return;
         }
