@@ -482,20 +482,17 @@ wss.on('connection', (ws, req) => {
     }
     const room = rooms.get(gameId);
 
-    if (room.players.length >= NUM_PLAYERS) {
-        ws.send(JSON.stringify({ type: 'error', message: 'Game is full.' }));
-        ws.close();
-        return;
-    }
-
-    // Fill seats array up to NUM_PLAYERS for consistent indexing
-    while (room.players.length < NUM_PLAYERS) room.players.push(null);
+    // Find an empty seat. If a player disconnects, their seat becomes null.
     const playerIndex = room.players.findIndex(p => p === null);
+
+    // If no empty seat is found, the game is full.
     if (playerIndex === -1) {
         ws.send(JSON.stringify({ type: 'error', message: 'Game is full.' }));
         ws.close();
         return;
     }
+
+    // Assign the player to the found seat
     room.players[playerIndex] = ws;
     // Initialize default name for this player index
     if (!room.playerNames[playerIndex]) {
