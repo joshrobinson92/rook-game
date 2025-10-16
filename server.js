@@ -92,8 +92,22 @@ class Game {
                 }
                 break;
             case 'CONTINUE_TO_DISCARD':
-                if (this.state === 'reveal' && playerIndex === this.widowOwner) {
-                    this.startDiscardPhase();
+                // Allow host to trigger continue during reveal, even if widowOwner is a bot
+                if (this.state === 'reveal' && (playerIndex === this.widowOwner || (typeof rooms === 'object' && rooms.get)) ) {
+                    // If rooms.get is available, check if playerIndex is host
+                    let isHost = false;
+                    try {
+                        // Find the gameId for this game instance
+                        for (const [gid, room] of rooms.entries()) {
+                            if (room.game === this) {
+                                isHost = room.hostIndex === playerIndex;
+                                break;
+                            }
+                        }
+                    } catch {}
+                    if (playerIndex === this.widowOwner || isHost) {
+                        this.startDiscardPhase();
+                    }
                 }
                 break;
             case 'DISCARD':
