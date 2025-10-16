@@ -418,7 +418,14 @@ function render(state) {
         case 'play':
             html += `<h2>Play Phase</h2>`;
             html += `<div>Trump: <strong>${state.trumpSuit}</strong></div>`;
-            html += `<div>Trick: <div class="hand">${state.trick.map(p => renderCard(p.card)).join('')}</div>`;
+            // Trick display with team label above each played card
+            const trickCards = state.trick.map(p => `
+                <div class="trick-card">
+                    <div class="card-team">${getTeam(p.player)}</div>
+                    ${renderCard(p.card)}
+                </div>
+            `).join('');
+            html += `<div>Trick: <div class="trick">${trickCards}</div>`;
             // Universal led-suit banner so everyone sees what to follow (server-derived)
             if (state.trick.length > 0) {
                 if (state.ledSuit) {

@@ -357,7 +357,7 @@ class Game {
         return true;
     }
     getCardPoints(card) {
-        if (card === ROOK_CARD || card.name === 'Rook') return 20; // Rook is worth 20
+    if (card === ROOK_CARD || card.name === 'Rook') return 0; // Rook is worth 0
         if (card.number === 5) return 5;
         if (card.number === 10 || card.number === 14) return 10;
         return 0;
