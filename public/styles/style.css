@@ -86,6 +86,44 @@ h1 { text-align: center; margin: 12px 8px; font-size: clamp(18px, 4vw, 28px); }
 }
 .card.card-back { background: linear-gradient(180deg,#444,#222); color: #eee; border-color: #111; }
 .card.special { background: linear-gradient(180deg,#ffd54f,#f1c40f); color: #111; border-color: #c90; }
+
+/* Rules modal and persistent button */
+#rules-btn {
+	position: fixed;
+	right: 16px;
+	bottom: 16px;
+	z-index: 1200;
+	background: #2196f3;
+	color: #fff;
+	border: none;
+	padding: 10px 14px;
+	border-radius: 10px;
+	cursor: pointer;
+	box-shadow: 0 6px 18px rgba(0,0,0,0.3);
+}
+#rules-overlay {
+	position: fixed;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0,0,0,0.6);
+	z-index: 1100;
+}
+.rules-panel {
+	width: min(880px, 92%);
+	max-height: 84vh;
+	overflow: auto;
+	background: #1e1e1e;
+	color: #eee;
+	padding: 18px;
+	border-radius: 10px;
+	box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+}
+.rules-header { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.rules-header h2 { margin:0; }
+.rules-header button { background:transparent; border:0; color:#ddd; font-size:18px; cursor:pointer; }
+.rules-body { margin-top:10px; line-height:1.45; }
 .widow { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; justify-content: center; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .bidding { margin: 16px 0; }
 .bid-btn, .pass-btn { margin: 0 4px; padding: 6px 12px; font-size: 1em; border-radius: 4px; border: none; background: #666; color: #fff; cursor: pointer; }

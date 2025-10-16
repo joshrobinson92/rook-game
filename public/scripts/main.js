@@ -271,6 +271,80 @@ function generateGameId() {
     }
 })();
 
+// --- Rules UI (persistent) ---
+function ensureRulesUI() {
+    if (document.getElementById('rules-btn')) return;
+
+    const btn = document.createElement('button');
+    btn.id = 'rules-btn';
+    btn.title = 'Open rulebook';
+    btn.textContent = 'Rules';
+    document.body.appendChild(btn);
+
+    const overlay = document.createElement('div');
+    overlay.id = 'rules-overlay';
+    overlay.innerHTML = `
+        <div class="rules-panel">
+            <div class="rules-header">
+                <h2>Rook — Rulebook</h2>
+                <button id="rules-close" aria-label="Close rules">✕</button>
+            </div>
+            <div class="rules-body">
+                <h3>Overview</h3>
+                <p>Rook is a trick-taking team game for 4 players (2 teams). This implementation uses a 4-color deck plus the Rook card.</p>
+
+                <h3>Phases</h3>
+                <ul>
+                    <li><strong>Bidding</strong>: Players bid in turn or pass. Each bid must be higher than the current highest bid (in increments of 5). Maximum bid is 100.</li>
+                    <li><strong>Reveal</strong>: The winning bidder views the widow (5 cards). The host controls when to continue to discard.</li>
+                    <li><strong>Discard</strong>: Widow-owner discards 5 cards into the discarded pile (only they and the host can see specifics).</li>
+                    <li><strong>Choose Trump</strong>: The widow-owner chooses trump suit.</li>
+                    <li><strong>Play</strong>: Tricks are played. The Rook may be led and the leader then calls a color (suit) that becomes the led suit.</li>
+                    <li><strong>Score</strong>: Points are tallied after all hands are played.</li>
+                </ul>
+
+                <h3>Following Suit</h3>
+                <p>If a suit is led (or the Rook has been led and a color called), players must follow suit if able. The Rook may be played instead of following.</p>
+
+                <h3>Card Points</h3>
+                <ul>
+                    <li>5 &raquo; 5 points</li>
+                    <li>10 &raquo; 10 points</li>
+                    <li>14 &raquo; 10 points</li>
+                    <li>Rook &raquo; 0 points</li>
+                </ul>
+
+                <h3>Trick Winner</h3>
+                <p>Tricks are won by the highest card of the led suit, unless trump is played. Trumps beat non-trumps. If the Rook is played and called, the called color counts as the led suit.</p>
+
+                <h3>Scoring & Match</h3>
+                <p>Points captured in tricks are added to each team's total. The bidding team must make at least their bid or they lose that amount from their total; defenders keep their points. A match ends when a team reaches 250 points (Game Over). Use Deal Again to continue or Play Again to reset the match.</p>
+
+                <h3>Host Controls</h3>
+                <p>The player who clicked "Start Game" is the host. The host controls starting the game, advancing tricks (Next Trick), and continuing from the widow reveal.</p>
+
+                <h3>Bots</h3>
+                <p>Bots can be added to seats. Bot difficulty affects bidding and play strength. The host can add or replace players with bots before the game starts.</p>
+
+                <p style="margin-top:8px;font-size:90%;color:#bbb">This rulebook summarizes the rules enforced by this app. For house rules or tournament variants, adjust settings or source code as needed.</p>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const open = () => { overlay.style.display = 'flex'; document.body.classList.add('rules-open'); };
+    const close = () => { overlay.style.display = 'none'; document.body.classList.remove('rules-open'); };
+
+    btn.addEventListener('click', open);
+    overlay.querySelector('#rules-close').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+    // Start hidden
+    overlay.style.display = 'none';
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ensureRulesUI); else ensureRulesUI();
+
 // --- Rendering Logic ---
 function groupAndSortHand(hand) {
     // Group by color, sort each group descending by number, Rook last
