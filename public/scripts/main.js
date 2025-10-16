@@ -459,6 +459,28 @@ function render(state) {
             }
             break;
 
+        case 'post_trick':
+            html += `<h2>Trick Complete</h2>`;
+            html += `<div>Trump: <strong>${state.trumpSuit}</strong></div>`;
+            const trickCards2 = state.trick.map(p => `
+                <div class="trick-card">
+                    <div class="card-team">${getTeam(p.player)}</div>
+                    ${renderCard(p.card)}
+                </div>
+            `).join('');
+            html += `<div>Trick: <div class="trick">${trickCards2}</div>`;
+            if (state.ledSuit) {
+                const rookLed = state.trick[0].card && state.trick[0].card.name === 'Rook';
+                html += `<div class="called-color-notice">Led Suit: <strong>${state.ledSuit}</strong>${rookLed ? ' (Rook called)' : ''}</div>`;
+            }
+            html += `</div>`;
+            if (myPlayerIndex === 0) {
+                html += `<button id="next-trick-btn" style="margin-top:8px;padding:8px 12px;border-radius:6px;border:0;background:#4caf50;color:#fff;cursor:pointer;">Next Trick</button>`;
+            } else {
+                html += `<div style="margin-top:8px;color:#ccc;">Waiting for Player 1 to continue…</div>`;
+            }
+            break;
+
         case 'score':
             const { biddingTeam, bidAmount, teamPoints } = state.handResult;
             const otherTeam = biddingTeam === 'Team A' ? 'Team B' : 'Team A';
@@ -472,6 +494,14 @@ function render(state) {
             html += `<div>${resultMsg}</div>`;
             html += `<div><strong>Hand Points:</strong> Team A: ${teamPoints['Team A']}, Team B: ${teamPoints['Team B']}</div>`;
             html += `<button id="deal-again-btn">Deal Again</button>`;
+            break;
+
+        case 'game_over':
+            html += `<h2>Game Over</h2>`;
+            const winner = state.matchWinner === 'Tie' ? 'It\'s a tie!' : `${state.matchWinner} wins!`;
+            html += `<div style="margin:6px 0;">${winner}</div>`;
+            html += `<div><strong>Final Scores:</strong> Team A: ${state.teamScores['Team A']}, Team B: ${state.teamScores['Team B']}</div>`;
+            html += `<button id="deal-again-btn">Play Again</button>`;
             break;
     }
 
@@ -587,8 +617,18 @@ function addEventListeners(state) {
         }
     }
 
+    if (state.gameState === 'post_trick' && myPlayerIndex === 0) {
+        const nextBtn = document.getElementById('next-trick-btn');
+        if (nextBtn) nextBtn.onclick = () => sendAction({ type: 'NEXT_TRICK' });
+    }
+
     if (state.gameState === 'score') {
         document.getElementById('deal-again-btn').onclick = () => sendAction({ type: 'DEAL_AGAIN' });
+    }
+
+    if (state.gameState === 'game_over') {
+        const btn = document.getElementById('deal-again-btn');
+        if (btn) btn.onclick = () => sendAction({ type: 'DEAL_AGAIN' });
     }
 
     // In-game copy link

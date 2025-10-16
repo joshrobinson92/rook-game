@@ -24,7 +24,7 @@ const rooms = new Map();
 
 class Game {
     constructor() {
-        this.state = 'waiting'; // waiting, bidding, reveal, discard, trump, play, score
+    this.state = 'waiting'; // waiting, bidding, reveal, discard, trump, play, post_trick, score, game_over
         this.deck = this.filterDeck(createDeck());
         this.hands = [];
         this.widow = [];
@@ -37,7 +37,9 @@ class Game {
         this.trumpSuit = null;
         this.trick = [];
         this.trickLeader = null;
-        this.tricksWon = { 'Team A': [], 'Team B': [] };
+    this.tricksWon = { 'Team A': [], 'Team B': [] };
+    this.pendingTrick = null; // { trick:[...], winningPlayer, winningTeam }
+    this.matchWinner = null; // set when reaching 250
         this.teamScores = { 'Team A': 0, 'Team B': 0 };
         this.deal();
         this.state = 'bidding';
@@ -114,6 +116,24 @@ class Game {
                 const currentPlayer = this.getCurrentPlayer();
                 if (this.state === 'play' && playerIndex === currentPlayer) {
                     this.playCard(playerIndex, action.card);
+                }
+                break;
+            case 'NEXT_TRICK':
+                // Only Player 1 (index 0) can advance to the next trick
+                if (this.state === 'post_trick' && playerIndex === 0 && this.pendingTrick) {
+                    const { winningPlayer, winningTeam } = this.pendingTrick;
+                    // Move completed trick to the winner's pile
+                    this.tricksWon[winningTeam].push([...this.trick]);
+                    this.trickLeader = winningPlayer;
+                    // Clear the table
+                    this.trick = [];
+                    this.pendingTrick = null;
+                    // If hands are empty, score the hand; otherwise resume play
+                    if (this.hands.every(h => h.length === 0)) {
+                        this.scoreHand();
+                    } else {
+                        this.state = 'play';
+                    }
                 }
                 break;
             case 'DEAL_AGAIN':
@@ -247,13 +267,9 @@ class Game {
 
         const winningPlayer = this.trick[winningIdx].player;
         const winningTeam = this.getTeam(winningPlayer);
-        this.tricksWon[winningTeam].push([...this.trick]);
-        this.trickLeader = winningPlayer;
-        this.trick = [];
-
-        if (this.hands.every(h => h.length === 0)) {
-            this.scoreHand();
-        }
+        // Pause after trick: keep cards visible and wait for NEXT_TRICK
+        this.pendingTrick = { trick: [...this.trick], winningPlayer, winningTeam };
+        this.state = 'post_trick';
     }
 
     scoreHand() {
@@ -290,6 +306,14 @@ class Game {
             bidAmount,
             teamPoints,
         };
+
+        // Check for match winner (250+ points)
+        const a = this.teamScores['Team A'];
+        const b = this.teamScores['Team B'];
+        if (a >= 250 || b >= 250) {
+            this.state = 'game_over';
+            this.matchWinner = a === b ? 'Tie' : (a > b ? 'Team A' : 'Team B');
+        }
     }
 
     // --- Utility Functions ---
@@ -405,10 +429,12 @@ class Game {
             ledSuit,
             trickLeader: this.trickLeader,
             currentPlayer: this.getCurrentPlayer(),
+            postTrick: this.state === 'post_trick' ? { winner: this.pendingTrick ? this.pendingTrick.winningTeam : null } : null,
             // Prompt for color only if the first card played in a trick is the Rook, and a color hasn't been called yet.
             promptForRookColor: this.state === 'play' && this.trick.length === 1 && this.trick[0].card && this.trick[0].card.name === 'Rook' && !this.trick[0].calledColor && playerIndex === this.trickLeader,
             teamScores: this.teamScores,
             handResult: this.state === 'score' ? this.handResult : null,
+            matchWinner: this.state === 'game_over' ? this.matchWinner : null,
         };
     }
 }
@@ -509,6 +535,10 @@ wss.on('connection', (ws, req) => {
                 const oldScores = { ...r2.game.teamScores };
                 r2.game = new Game();
                 r2.game.teamScores = oldScores;
+                broadcastGameState(gameId);
+            } else if (r2.game.state === 'game_over') {
+                // Start a fresh match (reset scores)
+                r2.game = new Game();
                 broadcastGameState(gameId);
             }
             return;
