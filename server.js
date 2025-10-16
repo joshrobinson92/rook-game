@@ -489,10 +489,20 @@ wss.on('connection', (ws, req) => {
     }
     const room = rooms.get(gameId);
 
-    // Find an empty seat.
-    const playerIndex = room.players.findIndex(p => p === null);
+    // Find an empty seat; if none, free a bot seat for the human
+    let playerIndex = room.players.findIndex(p => p === null);
+    if (playerIndex === -1) {
+        const botIndex = room.players.findIndex(p => p && p.isBot);
+        if (botIndex !== -1) {
+            // Free the bot seat for the human
+            room.players[botIndex] = null;
+            delete room.botDifficulty[botIndex];
+            room.playerNames[botIndex] = null;
+            playerIndex = botIndex;
+        }
+    }
 
-    // If no empty seat is found, the game is full.
+    // If still no seat, the game is full.
     if (playerIndex === -1) {
         ws.send(JSON.stringify({ type: 'error', message: 'Game is full.' }));
         ws.close();
@@ -641,10 +651,11 @@ wss.on('connection', (ws, req) => {
             console.log(`[${gameId}] Game reset due to disconnect.`);
         }
         broadcastPlayerCount(gameId);
-        // Cleanup empty rooms
-        if (r.players.every(p => p === null)) {
+        // Cleanup rooms with no humans left (ignore bots)
+        const hasHuman = r.players.some(p => p && !p.isBot);
+        if (!hasHuman) {
             rooms.delete(gameId);
-            console.log(`[${gameId}] Room deleted (empty).`);
+            console.log(`[${gameId}] Room deleted (no humans remain).`);
         }
     });
 });
