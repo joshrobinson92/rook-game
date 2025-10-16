@@ -359,8 +359,11 @@ function render(state) {
             `).join('');
 
             if (state.currentBidder === myPlayerIndex) {
+                const highest = Math.max(0, ...(state.bids || []).map(b => b || 0));
+                const options = [];
+                for (let bid = highest + 5; bid <= 200; bid += 5) options.push(bid);
                 html += `<div class="bidding">Your Bid: 
-                    ${[...Array(21).keys()].map(i => i * 5).map(bid => `<button class="bid-btn" data-bid="${bid}">${bid}</button>`).join('')}
+                    ${options.map(bid => `<button class="bid-btn" data-bid="${bid}">${bid}</button>`).join('')}
                     <button class="pass-btn">Pass</button>
                 </div>`;
             }

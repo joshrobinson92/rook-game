@@ -73,9 +73,22 @@ class Game {
         switch (action.type) {
             case 'BID':
                 if (this.state === 'bidding' && playerIndex === this.currentBidder) {
-                    this.bids[playerIndex] = action.amount;
-                    this.passed[playerIndex] = action.amount === null; // Pass if amount is null
-                    this.nextBidder();
+                    const amount = action.amount;
+                    if (amount === null) {
+                        // Pass
+                        this.bids[playerIndex] = null;
+                        this.passed[playerIndex] = true;
+                        this.nextBidder();
+                    } else {
+                        const currentHighest = Math.max(0, ...this.bids.map(b => b || 0));
+                        const isValid = typeof amount === 'number' && amount % 5 === 0 && amount > currentHighest && amount <= 200;
+                        if (!isValid) {
+                            return { notify: `Bid must be higher than ${currentHighest} (in increments of 5).` };
+                        }
+                        this.bids[playerIndex] = amount;
+                        this.passed[playerIndex] = false;
+                        this.nextBidder();
+                    }
                 }
                 break;
             case 'CONTINUE_TO_DISCARD':
@@ -429,6 +442,9 @@ class Game {
             }
         }
 
+        // Hide actual discarded card faces from non-owner
+        const discardedForClient = (playerIndex === this.widowOwner) ? this.discarded : this.discarded.map(() => ({}));
+
         return {
             playerIndex,
             gameState: this.state,
@@ -440,7 +456,7 @@ class Game {
             currentBidder: this.currentBidder,
             widowOwner: this.widowOwner,
             widowHand: (this.state === 'discard' && playerIndex === this.widowOwner) ? this.widowHand : null,
-            discarded: this.discarded,
+            discarded: discardedForClient,
             trumpSuit: this.trumpSuit,
             trick: trickForClient,
             ledSuit,
