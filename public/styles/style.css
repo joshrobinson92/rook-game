@@ -81,6 +81,11 @@ h1 { text-align: center; margin: 12px 8px; font-size: clamp(18px, 4vw, 28px); }
 	outline: 3px solid #ff6600;
 	box-shadow: 0 0 8px #ff6600;
 }
+.card {
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+.card.card-back { background: linear-gradient(180deg,#444,#222); color: #eee; border-color: #111; }
+.card.special { background: linear-gradient(180deg,#ffd54f,#f1c40f); color: #111; border-color: #c90; }
 .widow { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; justify-content: center; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .bidding { margin: 16px 0; }
 .bid-btn, .pass-btn { margin: 0 4px; padding: 6px 12px; font-size: 1em; border-radius: 4px; border: none; background: #666; color: #fff; cursor: pointer; }

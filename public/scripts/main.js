@@ -306,7 +306,15 @@ function renderCard(card) {
     if (!card) return '';
     if (!card.color) return `<div class="card card-back"></div>`; // Face-down card
     if (card.name === 'Rook') return `<div class="card special" data-cardid="Rook">Rook</div>`;
-    return `<div class="card" data-cardid="${getCardId(card)}" style="border-color:${card.color.toLowerCase()};">${card.number}<br>${card.color}</div>`;
+    // Map colors to light background shades and appropriate text color
+    const colorMap = {
+        'Black': { bg: '#333333', text: '#fff', border: '#111' },
+        'Red':   { bg: '#ffdede', text: '#111', border: '#ff7f7f' },
+        'Green': { bg: '#e6ffea', text: '#111', border: '#7fdf9a' },
+        'Yellow':{ bg: '#fff8d6', text: '#111', border: '#ffea7f' }
+    };
+    const c = colorMap[card.color] || { bg: '#ffffff', text: '#111', border: card.color.toLowerCase() };
+    return `<div class="card" data-cardid="${getCardId(card)}" style="background:${c.bg};color:${c.text};border-color:${c.border};">${card.number}<br>${card.color}</div>`;
 }
 
 function getTeam(playerIdx) {
