@@ -82,9 +82,15 @@ class Game {
                         this.nextBidder();
                     } else {
                         const currentHighest = Math.max(0, ...this.bids.map(b => b || 0));
-                        const isValid = typeof amount === 'number' && amount % 5 === 0 && amount > currentHighest && amount <= 100;
+                        const maxBid = (this.rules === 'classic') ? 120 : 100;
+                        const minStart = (this.rules === 'classic') ? 70 : 5;
+                        const minBid = currentHighest === 0 ? Math.max(minStart, currentHighest + 5) : currentHighest + 5;
+                        const isValid = typeof amount === 'number' && amount % 5 === 0 && amount >= minBid && amount <= maxBid;
                         if (!isValid) {
-                            return { notify: `Bid must be higher than ${currentHighest} (in increments of 5).` };
+                            const msg = (this.rules === 'classic')
+                                ? `Bid must be at least ${minBid} and at most ${maxBid} (in increments of 5).`
+                                : `Bid must be higher than ${currentHighest} (in increments of 5).`;
+                            return { notify: msg };
                         }
                         this.bids[playerIndex] = amount;
                         this.passed[playerIndex] = false;
@@ -120,7 +126,7 @@ class Game {
                 break;
             case 'CALL_ROOK_COLOR':
                 // The leader of the trick (who played the Rook) calls the color
-                if (this.state === 'play' && playerIndex === this.trickLeader && this.trick.length === 1 && this.trick[0].card.name === 'Rook') {
+                if (this.rules !== 'classic' && this.state === 'play' && playerIndex === this.trickLeader && this.trick.length === 1 && this.trick[0].card.name === 'Rook') {
                     this.trick[0].calledColor = action.color;
                     // After calling color, it's the next player's turn (player after trickLeader)
                 }
@@ -207,7 +213,7 @@ class Game {
         if (this.state !== 'play') return null;
         // If the first card of the trick is the Rook and no suit has been called yet,
         // it's still effectively the leader's turn to call a color. Do not advance.
-        if (this.trick.length === 1 && this.trick[0].card && this.trick[0].card.name === 'Rook' && !this.trick[0].calledColor) {
+        if (this.rules !== 'classic' && this.trick.length === 1 && this.trick[0].card && this.trick[0].card.name === 'Rook' && !this.trick[0].calledColor) {
             return this.trickLeader;
         }
         return (this.trickLeader + this.trick.length) % NUM_PLAYERS;
@@ -219,17 +225,24 @@ class Game {
 
         // --- Rule Validation: Follow Suit ---
         if (this.trick.length > 0) {
-            const ledCard = this.trick[0].card;
-            // If Rook was led and color was called, that's the suit. Otherwise, it's the card's color.
-            const ledSuit = this.trick[0].calledColor || ledCard.color;
-            const playerHasLedSuit = hand.some(c => c.color === ledSuit);
-
-            // If the player has the led suit, they must play it (or the Rook).
-            // The card they chose is not of the led suit, and it's not the Rook.
-            if (playerHasLedSuit && card.color !== ledSuit && card.name !== 'Rook') {
+            const first = this.trick[0];
+            const ledSuit = (first.card && first.card.name === 'Rook')
+                ? (this.rules === 'classic' ? this.trumpSuit : first.calledColor)
+                : (first.card ? first.card.color : null);
+            const playerHasLedSuit = hand.some(c => c && c.color === ledSuit);
+            // If the player has the led suit, they must play it (or the Rook which is always legal).
+            if (ledSuit && playerHasLedSuit && card.color !== ledSuit && card.name !== 'Rook') {
                 console.log(`Player ${playerIndex} failed to follow suit. Move rejected.`);
-                // Do not process the move. The client UI will remain unchanged.
                 return;
+            }
+            // Classic specific: if trump was led and player cannot follow with trump but holds Rook, they must play Rook
+            if (this.rules === 'classic' && ledSuit === this.trumpSuit) {
+                const hasTrump = hand.some(c => c && c.color === this.trumpSuit);
+                const hasRook = hand.some(c => c && c.name === 'Rook');
+                if (!hasTrump && hasRook && card.name !== 'Rook') {
+                    console.log(`Player ${playerIndex} must play Rook when trump led and no trump available. Move rejected.`);
+                    return;
+                }
             }
         }
 
@@ -237,10 +250,11 @@ class Game {
             const [playedCard] = hand.splice(cardIndex, 1);
             this.trick.push({ player: playerIndex, card: playedCard });
 
-            // If the Rook was just played, the turn pauses for the leader to call a color.
-            // Don't check for a finished trick yet.
-            if (playedCard.name === 'Rook' && this.trick.length === 1) {
-                return; // Wait for CALL_ROOK_COLOR action
+            // In Robinson rules, if Rook is led first, wait for color call
+            if (this.rules !== 'classic') {
+                if (playedCard.name === 'Rook' && this.trick.length === 1) {
+                    return; // Wait for CALL_ROOK_COLOR action
+                }
             }
 
             if (this.trick.length === NUM_PLAYERS) {
@@ -251,30 +265,37 @@ class Game {
 
     finishTrick() {
         let winningIdx = 0;
-        let winningCard = this.trick[0].card;
-        // The led suit is either the called color for a Rook, or the card's own color.
-        const ledSuit = this.trick[0].calledColor || winningCard.color;
-    let rookPlayed = this.trick.some(play => play.card === ROOK_CARD);
-
-        if (rookPlayed) {
-            winningIdx = this.trick.findIndex(play => play.card === ROOK_CARD);
-        } else {
-            for (let i = 1; i < this.trick.length; i++) {
-                const currentCard = this.trick[i].card;
-
-                // Rule 1: A trump card beats a non-trump card.
-                if (currentCard.color === this.trumpSuit && winningCard.color !== this.trumpSuit) {
-                    winningIdx = i;
-                    winningCard = currentCard;
-                } // Rule 2: If the winning card is not trump, a card of the led suit beats an off-suit card.
-                else if (winningCard.color !== this.trumpSuit && currentCard.color === ledSuit && winningCard.color !== ledSuit) {
-                    winningIdx = i;
-                    winningCard = currentCard;
-                } // Rule 3: If both cards are of the same suit (either trump or the led suit), the higher number wins.
-                else if (currentCard.color === winningCard.color && currentCard.number > (winningCard.number || 0)) {
-                    winningIdx = i;
-                    winningCard = currentCard;
-                }
+        const first = this.trick[0];
+        const ledSuit = (first.card && first.card.name === 'Rook')
+            ? (this.rules === 'classic' ? this.trumpSuit : first.calledColor)
+            : (first.card ? first.card.color : null);
+        const isTrump = (c) => {
+            if (!c) return false;
+            if (c.name === 'Rook') return this.rules === 'classic';
+            return c.color === this.trumpSuit;
+        };
+        const beats = (a, b) => {
+            // Returns true if card a beats card b under current rules
+            if (a.name === 'Rook' && this.rules === 'classic') return isTrump(b) ? true : true; // Rook is top trump
+            if (b && b.name === 'Rook' && this.rules === 'classic') return false;
+            const aTrump = isTrump(a), bTrump = isTrump(b);
+            if (aTrump && !bTrump) return true;
+            if (!aTrump && bTrump) return false;
+            // Neither or both trump: prefer led suit when not trump
+            if (!aTrump && !bTrump) {
+                const aLed = a && a.color === ledSuit;
+                const bLed = b && b.color === ledSuit;
+                if (aLed && !bLed) return true;
+                if (!aLed && bLed) return false;
+            }
+            // Compare number values
+            return (a.number || 0) > (b?.number || 0);
+        };
+        for (let i = 1; i < this.trick.length; i++) {
+            const currentCard = this.trick[i].card;
+            const winningCard = this.trick[winningIdx].card;
+            if (beats(currentCard, winningCard)) {
+                winningIdx = i;
             }
         }
 
@@ -312,10 +333,12 @@ class Game {
                 }
             }
         }
-
-    const biddingTeam = this.getTeam(this.widowOwner);
+        // Assign discarded (nest) points: classic -> last trick winner; robinson -> bidding team
+        const biddingTeam = this.getTeam(this.widowOwner);
+        const lastTrickTeam = this.getTeam(this.trickLeader == null ? this.widowOwner : this.trickLeader);
+        const discardTeam = (this.rules === 'classic') ? lastTrickTeam : biddingTeam;
         for (const card of this.discarded) {
-            teamPoints[biddingTeam] += this.getCardPoints(card);
+            teamPoints[discardTeam] += this.getCardPoints(card);
         }
 
         const otherTeam = biddingTeam === 'Team A' ? 'Team B' : 'Team A';
@@ -337,16 +360,21 @@ class Game {
             teamPoints,
         };
 
-        // Check for match winner (250+ points)
+        // Check for match winner (rules-based target)
+        const target = (this.rules === 'classic') ? 300 : 250;
         const a = this.teamScores['Team A'];
         const b = this.teamScores['Team B'];
-        if (a >= 250 || b >= 250) {
+        if (a >= target || b >= target) {
             this.state = 'game_over';
             this.matchWinner = a === b ? 'Tie' : (a > b ? 'Team A' : 'Team B');
         }
     }
 
     // --- Utility Functions ---
+    hasNoCounters(idx) {
+        const hand = this.hands[idx] || [];
+        return !hand.some(c => this.getCardPoints(c) > 0 || (c && c.name === 'Rook' && this.rules === 'classic'));
+    }
     getOwnerHandForCheck() {
         if (this.state === 'discard') return this.widowHand;
         return this.hands[this.widowOwner] || [];
@@ -406,7 +434,7 @@ class Game {
         return true;
     }
     getCardPoints(card) {
-    if (card === ROOK_CARD || card.name === 'Rook') return 0; // Rook is worth 0
+    if (card === ROOK_CARD || card.name === 'Rook') return (this.rules === 'classic') ? 20 : 0; // Classic: Rook 20
         if (card.number === 5) return 5;
         if (card.number === 10 || card.number === 14) return 10;
         return 0;
@@ -421,7 +449,9 @@ class Game {
         // Determine if the widow should be visible to this player
         const isRevealPhase = this.state === 'reveal';
         const isDiscardPhaseForOwner = this.state === 'discard' && playerIndex === this.widowOwner;
-        const showWidow = isRevealPhase || isDiscardPhaseForOwner;
+        const showWidow = (this.rules === 'classic')
+            ? (playerIndex === this.widowOwner && (isRevealPhase || isDiscardPhaseForOwner))
+            : (isRevealPhase || isDiscardPhaseForOwner);
 
         // Deep copy trick array so calledColor is always present for all players
         const trickForClient = this.trick.map(t => {
@@ -436,7 +466,7 @@ class Game {
         if (this.trick.length > 0) {
             const first = this.trick[0];
             if (first.card && first.card.name === 'Rook') {
-                ledSuit = first.calledColor || null;
+                ledSuit = (this.rules === 'classic') ? this.trumpSuit : (first.calledColor || null);
             } else if (first.card) {
                 ledSuit = first.card.color || null;
             }
@@ -463,8 +493,8 @@ class Game {
             trickLeader: this.trickLeader,
             currentPlayer: this.getCurrentPlayer(),
             postTrick: this.state === 'post_trick' ? { winner: this.pendingTrick ? this.pendingTrick.winningTeam : null } : null,
-            // Prompt for color only if the first card played in a trick is the Rook, and a color hasn't been called yet.
-            promptForRookColor: this.state === 'play' && this.trick.length === 1 && this.trick[0].card && this.trick[0].card.name === 'Rook' && !this.trick[0].calledColor && playerIndex === this.trickLeader,
+            // Prompt for color only for Robinson rules when Rook led
+            promptForRookColor: this.rules !== 'classic' && (this.state === 'play' && this.trick.length === 1 && this.trick[0].card && this.trick[0].card.name === 'Rook' && !this.trick[0].calledColor && playerIndex === this.trickLeader),
             teamScores: this.teamScores,
             handResult: this.state === 'score' ? this.handResult : null,
             matchWinner: this.state === 'game_over' ? this.matchWinner : null,
@@ -561,6 +591,21 @@ wss.on('connection', (ws, req) => {
             const seat = Math.max(0, Math.min(NUM_PLAYERS - 1, parseInt(action.seat, 10)));
             const difficulty = (action.difficulty || 'medium').toLowerCase();
             addBotAtSeat(gameId, seat, difficulty);
+            return;
+        }
+
+        if (action.type === 'REDEAL') {
+            const r2 = rooms.get(gameId);
+            if (!r2 || !r2.game) return;
+            if (r2.rules === 'classic' && r2.game.state === 'bidding') {
+                // Allow redeal if the requester has no counters
+                if (typeof playerIndex === 'number' && r2.game.hasNoCounters(playerIndex)) {
+                    r2.game = new Game(r2.rules);
+                    broadcastGameState(gameId);
+                } else {
+                    sendToPlayerInRoom(gameId, playerIndex, { type: 'notify', message: 'Redeal allowed only with no counters (Classic).' });
+                }
+            }
             return;
         }
 

@@ -430,7 +430,7 @@ function render(state) {
     // In-game header with share link
     html += `
         <div class="ingame-header" style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
-            <div>Game ID: <strong>${currentGameId || ''}</strong></div>
+            <div>Game ID: <strong>${currentGameId || ''}</strong> <span style="margin-left:10px;color:#bbb;">Rules: <strong>${(state.rules||'robinson')==='classic'?'Classic':'Robinson'}</strong></span></div>
             <div style="display:flex;gap:6px;align-items:center;">
                 <input id="ingame-share" type="text" readonly value="${buildShareUrl(currentGameId)}" style="width:240px;padding:6px;border-radius:6px;border:1px solid #444;background:#111;color:#eee;">
                 <button id="ingame-copy" style="padding:6px 10px;border-radius:6px;border:0;background:#9c27b0;color:#fff;cursor:pointer;">Copy Link</button>
@@ -462,11 +462,17 @@ function render(state) {
             if (state.currentBidder === myPlayerIndex) {
                 const highest = Math.max(0, ...(state.bids || []).map(b => b || 0));
                 const options = [];
-                for (let bid = highest + 5; bid <= 100; bid += 5) options.push(bid);
+                const maxBid = (state.rules === 'classic') ? 120 : 100;
+                const minStart = (state.rules === 'classic') ? 70 : 5;
+                const start = highest === 0 ? Math.max(minStart, highest + 5) : highest + 5;
+                for (let bid = start; bid <= maxBid; bid += 5) options.push(bid);
                 html += `<div class="bidding">Your Bid: 
                     ${options.map(bid => `<button class="bid-btn" data-bid="${bid}">${bid}</button>`).join('')}
                     <button class="pass-btn">Pass</button>
                 </div>`;
+                if (state.rules === 'classic') {
+                    html += `<div style="margin-top:8px;"><button id="redeal-btn" style="padding:6px 10px;border-radius:6px;border:0;background:#607d8b;color:#fff;cursor:pointer;">Call Redeal (No Counters)</button></div>`;
+                }
             }
             break;
 
@@ -625,6 +631,8 @@ function addEventListeners(state) {
             btn.onclick = () => sendAction({ type: 'BID', amount: parseInt(btn.dataset.bid) });
         });
         document.querySelector('.pass-btn').onclick = () => sendAction({ type: 'BID', amount: null });
+        const rbtn = document.getElementById('redeal-btn');
+        if (rbtn) rbtn.onclick = () => sendAction({ type: 'REDEAL' });
     }
 
     // Lobby: add bot button handler
