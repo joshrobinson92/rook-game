@@ -527,8 +527,30 @@ function render(state) {
                     ${['Black','Red','Green','Yellow'].map(s=>`<button class="check-200" data-suit="${s}">Check ${s}</button>`).join(' ')}
                     <div id="notify-area" style="margin-top:6px; color:#ffd54f;"></div>
                 </div>`;
+                // Show hands so the widow owner can review their cards while choosing trump
+                html += state.allHands.map((hand, i) => `
+                    <div class="player-area ${i === myPlayerIndex ? 'active-player' : ''}">
+                        <strong>${getPlayerName(i)}${i === myPlayerIndex ? ' (You)' : ''}</strong>
+                        ${ i === myPlayerIndex ? 
+                            `<div class="hand">${groupAndSortHand(hand).map(renderCard).join('')}</div>` 
+                            : 
+                            `<div>${hand.length} cards</div>`
+                        }
+                    </div>
+                `).join('');
             } else {
                 html += `<div>Waiting for Player ${state.widowOwner + 1} to choose trump.</div>`;
+                // Show hand counts for all players while waiting
+                html += state.allHands.map((hand, i) => `
+                    <div class="player-area">
+                        <strong>${getPlayerName(i)}${i === myPlayerIndex ? ' (You)' : ''}</strong>
+                        ${ i === myPlayerIndex ? 
+                            `<div class="hand">${groupAndSortHand(hand).map(renderCard).join('')}</div>` 
+                            : 
+                            `<div>${hand.length} cards</div>`
+                        }
+                    </div>
+                `).join('');
             }
             break;
 
