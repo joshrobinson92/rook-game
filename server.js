@@ -230,10 +230,22 @@ class Game {
                 ? (this.rules === 'classic' ? this.trumpSuit : first.calledColor)
                 : (first.card ? first.card.color : null);
             const playerHasLedSuit = hand.some(c => c && c.color === ledSuit);
-            // If the player has the led suit, they must play it (Rook is always legal in both rulesets).
-            if (ledSuit && playerHasLedSuit && card.color !== ledSuit && card.name !== 'Rook') {
-                console.log(`Player ${playerIndex} failed to follow suit. Move rejected.`);
-                return;
+            // If player has the led suit, they must play it.
+            if (ledSuit && playerHasLedSuit) {
+                if (card.color !== ledSuit) {
+                    // Rook exception:
+                    // - Classic: Rook may always be played even if player can follow
+                    // - Robinson: Rook may only be played if led suit is trump (Rook counts as trump)
+                    if (card.name === 'Rook') {
+                        if (this.rules !== 'classic' && ledSuit !== this.trumpSuit) {
+                            console.log(`Player ${playerIndex} cannot play Rook when holding led suit (Robinson, non-trump led). Move rejected.`);
+                            return;
+                        }
+                    } else {
+                        console.log(`Player ${playerIndex} failed to follow suit. Move rejected.`);
+                        return;
+                    }
+                }
             }
             // Classic specific: if trump was led and player cannot follow with trump but holds Rook, they must play Rook
             if (this.rules === 'classic' && ledSuit === this.trumpSuit) {

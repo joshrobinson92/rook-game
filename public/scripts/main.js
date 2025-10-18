@@ -718,7 +718,11 @@ function addEventListeners(state) {
             if (playerHasLedSuit) {
                 handCards.forEach(cardDiv => {
                     const cardId = cardDiv.dataset.cardid;
-                    if (cardId !== 'Rook' && !cardId.startsWith(ledSuit)) {
+                    // In Robinson rules, Rook is only legal mid-trick if led suit is trump
+                    const isRook = cardId === 'Rook';
+                    const isLed = cardId.startsWith(ledSuit);
+                    const disallowRook = (state.rules !== 'classic' && ledSuit && ledSuit !== state.trumpSuit && isRook);
+                    if ((!isRook && !isLed) || disallowRook) {
                         cardDiv.style.opacity = '0.5';
                         cardDiv.style.pointerEvents = 'none';
                     }
