@@ -46,7 +46,10 @@ function connectToGame(gameId) {
     const proto = isSecure ? 'wss' : 'ws';
     const params = new URLSearchParams(window.location.search);
     const rules = (params.get('rules') || 'robinson');
-    ws = new WebSocket(`${proto}://${window.location.host}/?game=${encodeURIComponent(gameId)}&rules=${encodeURIComponent(rules)}`);
+    const storedId = window.localStorage.getItem('playerId') || `p_${Math.random().toString(36).slice(2)}`;
+    // Ensure we persist the id for next time
+    window.localStorage.setItem('playerId', storedId);
+    ws = new WebSocket(`${proto}://${window.location.host}/?game=${encodeURIComponent(gameId)}&rules=${encodeURIComponent(rules)}&player=${encodeURIComponent(storedId)}`);
 
     ws.onopen = () => {
         console.log('Connected to the server.');
@@ -64,6 +67,9 @@ function connectToGame(gameId) {
         switch (data.type) {
             case 'welcome':
                 myPlayerIndex = data.playerIndex;
+                if (data.playerId) {
+                    window.localStorage.setItem('playerId', data.playerId);
+                }
                 break;
             case 'playerCount':
                 // Allow starting with at least 2 humans; server will auto-fill remaining seats with bots

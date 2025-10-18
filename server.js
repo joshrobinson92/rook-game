@@ -520,6 +520,7 @@ wss.on('connection', (ws, req) => {
     const url = new URL(req.url, 'http://localhost');
     const gameId = url.searchParams.get('game') || 'default';
     const rulesParam = (url.searchParams.get('rules') || 'robinson').toLowerCase();
+    const playerId = (url.searchParams.get('player') || '').trim();
     const rules = (rulesParam === 'classic') ? 'classic' : 'robinson';
 
     // Ensure room exists and is initialized
@@ -530,23 +531,33 @@ wss.on('connection', (ws, req) => {
             playerNames: Array(NUM_PLAYERS).fill(null),
             botDifficulty: {},
             hostIndex: null,
-            rules
+            rules,
+            playerIds: Array(NUM_PLAYERS).fill(null)
         });
     }
     const room = rooms.get(gameId);
     // If room already exists, prefer existing rules; if missing, set from param
     if (!room.rules) room.rules = rules;
 
-    // Find an empty seat; if none, free a bot seat for the human
-    let playerIndex = room.players.findIndex(p => p === null);
-    if (playerIndex === -1) {
-        const botIndex = room.players.findIndex(p => p && p.isBot);
-        if (botIndex !== -1) {
-            // Free the bot seat for the human
-            room.players[botIndex] = null;
-            delete room.botDifficulty[botIndex];
-            room.playerNames[botIndex] = null;
-            playerIndex = botIndex;
+    // Reconnect to same seat if playerId matches
+    let playerIndex = (playerId && Array.isArray(room.playerIds)) ? room.playerIds.indexOf(playerId) : -1;
+    if (playerIndex !== -1) {
+        const existing = room.players[playerIndex];
+        if (existing && existing.readyState === WebSocket.OPEN && !existing.isBot && existing !== ws) {
+            try { existing.close(1000, 'Reconnected'); } catch {}
+        }
+    } else {
+        // Find an empty seat; if none, free a bot seat for the human
+        playerIndex = room.players.findIndex(p => p === null);
+        if (playerIndex === -1) {
+            const botIndex = room.players.findIndex(p => p && p.isBot);
+            if (botIndex !== -1) {
+                // Free the bot seat for the human
+                room.players[botIndex] = null;
+                delete room.botDifficulty[botIndex];
+                // Keep the previous name if any
+                playerIndex = botIndex;
+            }
         }
     }
 
@@ -559,13 +570,14 @@ wss.on('connection', (ws, req) => {
 
     // Assign the player to the found seat
     room.players[playerIndex] = ws;
+    if (Array.isArray(room.playerIds)) room.playerIds[playerIndex] = playerId || room.playerIds[playerIndex] || `anon-${Math.random().toString(36).slice(2)}`;
     // Initialize default name for this player index if not already set
     if (!room.playerNames[playerIndex]) {
         room.playerNames[playerIndex] = `Player ${playerIndex + 1}`;
     }
     console.log(`[${gameId}] Player ${playerIndex + 1} connected to seat ${playerIndex}.`);
 
-    ws.send(JSON.stringify({ type: 'welcome', playerIndex }));
+    ws.send(JSON.stringify({ type: 'welcome', playerIndex, playerId: room.playerIds[playerIndex] }));
 
     // Show lobby status
     broadcastPlayerCount(gameId);
@@ -702,23 +714,18 @@ wss.on('connection', (ws, req) => {
         console.log(`[${gameId}] Player ${playerIndex + 1} disconnected from seat ${playerIndex}.`);
         const r = rooms.get(gameId);
         if (!r) return;
-        // Mark this seat empty but preserve seating
+        // Mark this seat empty but preserve name and playerId for reconnection
         if (r.players[playerIndex] === ws) {
             r.players[playerIndex] = null;
-            // Also clear their name so the lobby slot appears fully open
-            r.playerNames[playerIndex] = null;
+            // Preserve playerNames and playerIds for reconnect stability
         }
-        // Reset the game on disconnect for simplicity
-        if (r.game) {
-            r.game = null;
-            console.log(`[${gameId}] Game reset due to disconnect.`);
-        }
+        // Do not reset game on disconnect; allow reconnection
         broadcastPlayerCount(gameId);
-        // Cleanup rooms with no humans left (ignore bots)
+        // Optional cleanup: if no humans and no active game, delete room
         const hasHuman = r.players.some(p => p && !p.isBot);
-        if (!hasHuman) {
+        if (!hasHuman && (!r.game || r.game.state === 'waiting')) {
             rooms.delete(gameId);
-            console.log(`[${gameId}] Room deleted (no humans remain).`);
+            console.log(`[${gameId}] Room deleted (no humans remain and no active game).`);
         }
     });
 });
@@ -753,7 +760,7 @@ function broadcastPlayerCount(gameId) {
     const botDiffArr = Array.from({length: room.players.length}, (_, i) => room.botDifficulty[i] || null);
     room.players.forEach(ws => {
         if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'playerCount', count: playerCount, required: NUM_PLAYERS, playerNames: room.playerNames, isBot: isBotArr, botDifficulty: botDiffArr, rules: room.rules }));
+            ws.send(JSON.stringify({ type: 'playerCount', count: playerCount, required: NUM_PLAYERS, playerNames: room.playerNames, isBot: isBotArr, botDifficulty: botDiffArr, rules: room.rules, playerIds: room.playerIds }));
         }
     });
 }
