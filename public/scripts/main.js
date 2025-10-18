@@ -71,6 +71,7 @@ function connectToGame(gameId) {
                         <div>
                             <h2 style="margin:0;">Game ID: ${currentGameId}</h2>
                             <h3 style="margin:4px 0 0 0;">Waiting for players... ${data.count}/${data.required}</h3>
+                            <div style="margin-top:4px;font-size:13px;color:#bbb;">Rules: <strong>${(data.rules||'robinson')==='classic'?'Classic':'Robinson'}</strong></div>
                         </div>
                         <div>
                             ${canStart ? '<button id="start-game-btn" style="padding:8px 12px;border-radius:6px;border:0;background:#4caf50;color:#fff;cursor:pointer;">Start Game</button>' : ''}
@@ -187,6 +188,19 @@ function renderLanding() {
     gameDiv.innerHTML = `
         <div class="landing" style="max-width:520px;margin:24px auto;padding:16px;border-radius:10px;background:#1f1f1f;color:#eee;">
             <h2 style="margin-top:0">Start or Join a Game</h2>
+            <div style="margin:12px 0;padding:12px;background:#2a2a2a;border-radius:8px;display:flex;align-items:center;gap:8px;justify-content:space-between;">
+                <div style="font-weight:600;">Rules</div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <label style="display:flex;align-items:center;gap:6px;">
+                        <input type="radio" name="ruleset" value="robinson" checked>
+                        <span>Robinson</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;">
+                        <input type="radio" name="ruleset" value="classic">
+                        <span>Classic</span>
+                    </label>
+                </div>
+            </div>
             <div style="margin:12px 0;padding:12px;background:#2a2a2a;border-radius:8px;">
                 <div style="margin-bottom:8px;font-weight:600;">Create Game</div>
                 <div style="display:flex;gap:8px;align-items:center;">
@@ -217,8 +231,10 @@ function renderLanding() {
     const goTo = (id) => {
         const clean = (id || '').trim();
         if (!clean) return;
+        const rules = (document.querySelector('input[name="ruleset"]:checked')?.value) || 'robinson';
         const url = new URL(window.location.href);
         url.searchParams.set('game', clean);
+        url.searchParams.set('rules', rules);
         window.location.href = url.toString();
     };
 
@@ -235,6 +251,8 @@ function renderLanding() {
         if (!clean) { row.style.display = 'none'; return; }
         const u = new URL(window.location.href);
         u.searchParams.set('game', clean);
+        const rules = (document.querySelector('input[name="ruleset"]:checked')?.value) || 'robinson';
+        u.searchParams.set('rules', rules);
         shareInput.value = u.toString();
         row.style.display = 'flex';
     }
@@ -746,6 +764,10 @@ function buildShareUrl(gameId) {
     try {
         const u = new URL(window.location.href);
         u.searchParams.set('game', gameId || '');
+        // preserve rules param if present
+        const params = new URLSearchParams(window.location.search);
+        const rules = params.get('rules');
+        if (rules) u.searchParams.set('rules', rules);
         return u.toString();
     } catch {
         return window.location.href;

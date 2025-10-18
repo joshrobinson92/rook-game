@@ -23,7 +23,8 @@ const VALID_NUMBERS = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
 const rooms = new Map();
 
 class Game {
-    constructor() {
+    constructor(rules = 'robinson') {
+    this.rules = rules; // 'robinson' | 'classic'
     this.state = 'waiting'; // waiting, bidding, reveal, discard, trump, play, post_trick, score, game_over
         this.deck = this.filterDeck(createDeck());
         this.hands = [];
@@ -476,6 +477,8 @@ wss.on('connection', (ws, req) => {
     // Parse gameId from query string
     const url = new URL(req.url, 'http://localhost');
     const gameId = url.searchParams.get('game') || 'default';
+    const rulesParam = (url.searchParams.get('rules') || 'robinson').toLowerCase();
+    const rules = (rulesParam === 'classic') ? 'classic' : 'robinson';
 
     // Ensure room exists and is initialized
     if (!rooms.has(gameId)) {
@@ -484,10 +487,13 @@ wss.on('connection', (ws, req) => {
             game: null,
             playerNames: Array(NUM_PLAYERS).fill(null),
             botDifficulty: {},
-            hostIndex: null
+            hostIndex: null,
+            rules
         });
     }
     const room = rooms.get(gameId);
+    // If room already exists, prefer existing rules; if missing, set from param
+    if (!room.rules) room.rules = rules;
 
     // Find an empty seat; if none, free a bot seat for the human
     let playerIndex = room.players.findIndex(p => p === null);
@@ -572,7 +578,7 @@ wss.on('connection', (ws, req) => {
                     }
                     console.log(`[${gameId}] START_GAME received. Starting game with ${occupied} humans and ${NUM_PLAYERS - occupied} bots.`);
                     r2.hostIndex = playerIndex;
-                    r2.game = new Game();
+                    r2.game = new Game(r2.rules);
                     broadcastGameState(gameId);
                 } else {
                     // Not enough players to start; refresh lobby
@@ -616,12 +622,12 @@ wss.on('connection', (ws, req) => {
             if (r2.game.state === 'score') {
                 // Start a new hand, preserving cumulative team scores
                 const oldScores = { ...r2.game.teamScores };
-                r2.game = new Game();
+                r2.game = new Game(r2.rules);
                 r2.game.teamScores = oldScores;
                 broadcastGameState(gameId);
             } else if (r2.game.state === 'game_over') {
                 // Start a fresh match (reset scores)
-                r2.game = new Game();
+                r2.game = new Game(r2.rules);
                 broadcastGameState(gameId);
             }
             return;
@@ -667,7 +673,7 @@ function broadcastGameState(gameId) {
     const botDiffArr = Array.from({length: room.players.length}, (_, i) => room.botDifficulty[i] || null);
     room.players.forEach((ws, i) => {
         if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'gameState', ...room.game.getStateForPlayer(i), playerNames: room.playerNames, isBot: isBotArr, botDifficulty: botDiffArr, hostIndex: room.hostIndex }));
+            ws.send(JSON.stringify({ type: 'gameState', ...room.game.getStateForPlayer(i), playerNames: room.playerNames, isBot: isBotArr, botDifficulty: botDiffArr, hostIndex: room.hostIndex, rules: room.rules }));
         }
     });
     scheduleBotActions(gameId);
@@ -690,7 +696,7 @@ function broadcastPlayerCount(gameId) {
     const botDiffArr = Array.from({length: room.players.length}, (_, i) => room.botDifficulty[i] || null);
     room.players.forEach(ws => {
         if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'playerCount', count: playerCount, required: NUM_PLAYERS, playerNames: room.playerNames, isBot: isBotArr, botDifficulty: botDiffArr }));
+            ws.send(JSON.stringify({ type: 'playerCount', count: playerCount, required: NUM_PLAYERS, playerNames: room.playerNames, isBot: isBotArr, botDifficulty: botDiffArr, rules: room.rules }));
         }
     });
 }
