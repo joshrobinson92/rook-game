@@ -230,7 +230,7 @@ class Game {
                 ? (this.rules === 'classic' ? this.trumpSuit : first.calledColor)
                 : (first.card ? first.card.color : null);
             const playerHasLedSuit = hand.some(c => c && c.color === ledSuit);
-            // If the player has the led suit, they must play it (or the Rook which is always legal).
+            // If the player has the led suit, they must play it (Rook is always legal in both rulesets).
             if (ledSuit && playerHasLedSuit && card.color !== ledSuit && card.name !== 'Rook') {
                 console.log(`Player ${playerIndex} failed to follow suit. Move rejected.`);
                 return;
@@ -271,13 +271,13 @@ class Game {
             : (first.card ? first.card.color : null);
         const isTrump = (c) => {
             if (!c) return false;
-            if (c.name === 'Rook') return this.rules === 'classic';
+            if (c.name === 'Rook') return true; // Rook is always top trump in both rulesets
             return c.color === this.trumpSuit;
         };
         const beats = (a, b) => {
             // Returns true if card a beats card b under current rules
-            if (a.name === 'Rook' && this.rules === 'classic') return isTrump(b) ? true : true; // Rook is top trump
-            if (b && b.name === 'Rook' && this.rules === 'classic') return false;
+            if (a && a.name === 'Rook') return true; // Rook beats any other card
+            if (b && b.name === 'Rook') return false; // Any non-rook loses to Rook
             const aTrump = isTrump(a), bTrump = isTrump(b);
             if (aTrump && !bTrump) return true;
             if (!aTrump && bTrump) return false;
