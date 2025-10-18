@@ -44,7 +44,9 @@ function connectToGame(gameId) {
     // Build WebSocket URL supporting Render/HTTPS and game rooms via ?game=ID
     const isSecure = window.location.protocol === 'https:';
     const proto = isSecure ? 'wss' : 'ws';
-    ws = new WebSocket(`${proto}://${window.location.host}/?game=${encodeURIComponent(gameId)}`);
+    const params = new URLSearchParams(window.location.search);
+    const rules = (params.get('rules') || 'robinson');
+    ws = new WebSocket(`${proto}://${window.location.host}/?game=${encodeURIComponent(gameId)}&rules=${encodeURIComponent(rules)}`);
 
     ws.onopen = () => {
         console.log('Connected to the server.');
