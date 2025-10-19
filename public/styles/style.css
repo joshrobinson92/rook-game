@@ -86,6 +86,19 @@ h1 { text-align: center; margin: 12px 8px; font-size: clamp(18px, 4vw, 28px); }
     transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
 }
 .card.card-back { background: linear-gradient(180deg,#444,#222); color: #eee; border-color: #111; }
+.card.card-back::after {
+	content: 'ROOK';
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	font-weight: 800;
+	letter-spacing: 1px;
+	color: #eaeaea;
+	opacity: 0.9;
+	text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+	pointer-events: none;
+}
 .card.special { background: linear-gradient(180deg,#ffd54f,#f1c40f); color: #111; border-color: #c90; }
 
 /* Small points badge shown at bottom of scoring cards */
