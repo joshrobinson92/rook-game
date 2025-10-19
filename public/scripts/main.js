@@ -406,7 +406,12 @@ function getCardId(card) {
 function renderCard(card) {
     if (!card) return '';
     if (!card.color) return `<div class="card card-back"></div>`; // Face-down card
-    if (card.name === 'Rook') return `<div class="card special" data-cardid="Rook">Rook</div>`;
+    if (card.name === 'Rook') {
+        // Rook is 0 in Robinson, 20 in Classic; we only display points if > 0
+        const pts = (lastState && (lastState.rules === 'classic')) ? 20 : 0;
+        const badge = pts > 0 ? `<div class="card-points">${pts}</div>` : '';
+        return `<div class="card special" data-cardid="Rook">Rook${badge}</div>`;
+    }
     // Map colors to light background shades and appropriate text color
     const colorMap = {
         'Black': { bg: '#333333', text: '#fff', border: '#111' },
@@ -415,7 +420,9 @@ function renderCard(card) {
         'Yellow':{ bg: '#fff8d6', text: '#111', border: '#ffea7f' }
     };
     const c = colorMap[card.color] || { bg: '#ffffff', text: '#111', border: card.color.toLowerCase() };
-    return `<div class="card" data-cardid="${getCardId(card)}" style="background:${c.bg};color:${c.text};border-color:${c.border};">${card.number}<br>${card.color}</div>`;
+    const pts = (card.number === 5) ? 5 : ((card.number === 10 || card.number === 14) ? 10 : 0);
+    const badge = pts > 0 ? `<div class="card-points">${pts}</div>` : '';
+    return `<div class="card" data-cardid="${getCardId(card)}" style="background:${c.bg};color:${c.text};border-color:${c.border};">${card.number}<br>${card.color}${badge}</div>`;
 }
 
 function getTeam(playerIdx) {

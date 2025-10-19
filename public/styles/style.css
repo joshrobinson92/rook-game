@@ -60,6 +60,7 @@ h1 { text-align: center; margin: 12px 8px; font-size: clamp(18px, 4vw, 28px); }
 	user-select: none;
 	-webkit-tap-highlight-color: transparent;
 	touch-action: manipulation;
+    position: relative; /* allow positioning of points badge */
 }
 
 /* Highlight active player area */
@@ -86,6 +87,20 @@ h1 { text-align: center; margin: 12px 8px; font-size: clamp(18px, 4vw, 28px); }
 }
 .card.card-back { background: linear-gradient(180deg,#444,#222); color: #eee; border-color: #111; }
 .card.special { background: linear-gradient(180deg,#ffd54f,#f1c40f); color: #111; border-color: #c90; }
+
+/* Small points badge shown at bottom of scoring cards */
+.card-points {
+	position: absolute;
+	bottom: 4px;
+	left: 50%;
+	transform: translateX(-50%);
+	font-size: 0.6em;
+	padding: 2px 6px;
+	border-radius: 10px;
+	background: rgba(0,0,0,0.18);
+	border: 1px solid rgba(0,0,0,0.15);
+	pointer-events: none;
+}
 
 /* Rules modal and persistent button */
 #rules-btn {
