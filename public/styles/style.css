@@ -3,6 +3,20 @@ h1 { text-align: center; margin: 12px 8px; font-size: clamp(18px, 4vw, 28px); }
 :root {
 	--card-width: 60px;
 	--card-height: 90px;
+	/* Button theme */
+	--btn-radius: 10px;
+	--btn-padding-y: 10px;
+	--btn-padding-x: 14px;
+	--btn-font: 1rem;
+	--btn-shadow: 0 4px 14px rgba(0,0,0,0.25);
+	--btn-hover-raise: translateY(-1px);
+	--btn-focus: 0 0 0 3px rgba(33,150,243,0.35);
+	--btn-primary: #4caf50;
+	--btn-primary-hover: #43a047;
+	--btn-secondary: #2196f3;
+	--btn-secondary-hover: #1e88e5;
+	--btn-neutral: #666;
+	--btn-neutral-hover: #777;
 }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #222; color: #eee; }
 h1 { text-align: center; margin: 12px 8px; font-size: clamp(18px, 4vw, 28px); }
@@ -206,5 +220,108 @@ h1 { text-align: center; margin: 12px 8px; font-size: clamp(18px, 4vw, 28px); }
 	:root {
 		--card-width: 40px;
 		--card-height: 60px;
+	}
+}
+
+/* ---- Modern larger in-game buttons (scoped to gameplay contexts) ---- */
+/* Bidding buttons */
+.bidding .bid-btn,
+.bidding .pass-btn {
+	padding: var(--btn-padding-y) var(--btn-padding-x) !important;
+	font-size: calc(var(--btn-font) * 1.05) !important;
+	border-radius: var(--btn-radius) !important;
+	border: none !important;
+	box-shadow: var(--btn-shadow);
+	transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+}
+.bidding .bid-btn { background: var(--btn-secondary) !important; }
+.bidding .bid-btn:hover { background: var(--btn-secondary-hover) !important; transform: var(--btn-hover-raise); }
+.bidding .pass-btn { background: var(--btn-neutral) !important; }
+.bidding .pass-btn:hover { background: var(--btn-neutral-hover) !important; transform: var(--btn-hover-raise); }
+.bidding .bid-btn:focus-visible,
+.bidding .pass-btn:focus-visible { outline: none; box-shadow: var(--btn-focus); }
+
+/* Trump selection and 200-check buttons */
+.trump-btn,
+.check-200 { 
+	padding: var(--btn-padding-y) var(--btn-padding-x) !important;
+	font-size: calc(var(--btn-font) * 1.0) !important;
+	border-radius: var(--btn-radius) !important;
+	border: none !important;
+	background: var(--btn-secondary);
+	color: #fff;
+	box-shadow: var(--btn-shadow);
+	cursor: pointer;
+	transition: transform .12s ease, background .12s ease, box-shadow .12s ease;
+	margin: 4px 6px;
+}
+.trump-btn:hover,
+.check-200:hover { background: var(--btn-secondary-hover); transform: var(--btn-hover-raise); }
+.trump-btn:focus-visible,
+.check-200:focus-visible { outline: none; box-shadow: var(--btn-focus); }
+
+/* Confirm discard and Play card */
+#confirm-discard-btn,
+#play-card-btn {
+	padding: var(--btn-padding-y) var(--btn-padding-x) !important;
+	font-size: calc(var(--btn-font) * 1.05) !important;
+	border-radius: var(--btn-radius) !important;
+	border: none !important;
+	background: var(--btn-primary) !important;
+	color: #fff !important;
+	box-shadow: var(--btn-shadow);
+	transition: transform .12s ease, background .12s ease, box-shadow .12s ease;
+	margin-top: 8px;
+}
+#confirm-discard-btn:hover,
+#play-card-btn:hover { background: var(--btn-primary-hover) !important; transform: var(--btn-hover-raise); }
+#confirm-discard-btn:focus-visible,
+#play-card-btn:focus-visible { outline: none; box-shadow: var(--btn-focus); }
+
+/* Rook color call buttons (Robinson) */
+.call-color-btn {
+	padding: var(--btn-padding-y) var(--btn-padding-x) !important;
+	font-size: calc(var(--btn-font) * 1.0) !important;
+	border-radius: var(--btn-radius) !important;
+	border: none !important;
+	background: var(--btn-secondary) !important;
+	color: #fff !important;
+	box-shadow: var(--btn-shadow);
+	transition: transform .12s ease, background .12s ease, box-shadow .12s ease;
+	margin: 4px 6px;
+}
+.call-color-btn:hover { background: var(--btn-secondary-hover) !important; transform: var(--btn-hover-raise); }
+.call-color-btn:focus-visible { outline: none; box-shadow: var(--btn-focus); }
+
+/* Post-trick / Continue buttons */
+#next-trick-btn,
+#continue-btn,
+#deal-again-btn {
+	padding: var(--btn-padding-y) var(--btn-padding-x) !important;
+	font-size: calc(var(--btn-font) * 1.05) !important;
+	border-radius: var(--btn-radius) !important;
+	border: none !important;
+	background: var(--btn-primary) !important;
+	color: #fff !important;
+	box-shadow: var(--btn-shadow);
+	transition: transform .12s ease, background .12s ease, box-shadow .12s ease;
+}
+#next-trick-btn:hover,
+#continue-btn:hover,
+#deal-again-btn:hover { background: var(--btn-primary-hover) !important; transform: var(--btn-hover-raise); }
+#next-trick-btn:focus-visible,
+#continue-btn:focus-visible,
+#deal-again-btn:focus-visible { outline: none; box-shadow: var(--btn-focus); }
+
+/* Compact on small screens */
+@media (max-width: 480px) {
+	.bidding .bid-btn, .bidding .pass-btn,
+	.trump-btn, .check-200,
+	#confirm-discard-btn, #play-card-btn,
+	.call-color-btn,
+	#next-trick-btn, #continue-btn, #deal-again-btn {
+		padding: 10px 12px !important;
+		font-size: 0.95rem !important;
+		border-radius: 9px !important;
 	}
 }
