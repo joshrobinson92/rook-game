@@ -532,7 +532,8 @@ wss.on('connection', (ws, req) => {
             botDifficulty: {},
             hostIndex: null,
             rules,
-            playerIds: Array(NUM_PLAYERS).fill(null)
+            playerIds: Array(NUM_PLAYERS).fill(null),
+            teamNames: ['Team A', 'Team B']
         });
     }
     const room = rooms.get(gameId);
@@ -615,6 +616,31 @@ wss.on('connection', (ws, req) => {
             const seat = Math.max(0, Math.min(NUM_PLAYERS - 1, parseInt(action.seat, 10)));
             const difficulty = (action.difficulty || 'medium').toLowerCase();
             addBotAtSeat(gameId, seat, difficulty);
+            return;
+        }
+
+        if (action.type === 'SET_TEAM_NAME') {
+            const r2 = rooms.get(gameId);
+            if (!r2) return;
+            const idx = typeof action.team === 'number' ? action.team : (action.team === 'B' ? 1 : 0);
+            let name = (action.name || '').toString().trim();
+            if (!Array.isArray(r2.teamNames)) r2.teamNames = ['Team A', 'Team B'];
+            if (!name) name = idx === 0 ? 'Team A' : 'Team B';
+            if (name.length > 20) name = name.slice(0, 20);
+            r2.teamNames[idx] = name;
+            // Broadcast to lobby or game
+            if (r2.game) broadcastGameState(gameId); else broadcastPlayerCount(gameId);
+            return;
+        }
+        if (action.type === 'SET_TEAM_NAMES') {
+            const r2 = rooms.get(gameId);
+            if (!r2) return;
+            if (!Array.isArray(r2.teamNames)) r2.teamNames = ['Team A', 'Team B'];
+            const a = (action.a || '').toString().trim();
+            const b = (action.b || '').toString().trim();
+            r2.teamNames[0] = a ? a.slice(0, 20) : 'Team A';
+            r2.teamNames[1] = b ? b.slice(0, 20) : 'Team B';
+            if (r2.game) broadcastGameState(gameId); else broadcastPlayerCount(gameId);
             return;
         }
 
@@ -737,7 +763,7 @@ function broadcastGameState(gameId) {
     const botDiffArr = Array.from({length: room.players.length}, (_, i) => room.botDifficulty[i] || null);
     room.players.forEach((ws, i) => {
         if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'gameState', ...room.game.getStateForPlayer(i), playerNames: room.playerNames, isBot: isBotArr, botDifficulty: botDiffArr, hostIndex: room.hostIndex, rules: room.rules }));
+            ws.send(JSON.stringify({ type: 'gameState', ...room.game.getStateForPlayer(i), playerNames: room.playerNames, isBot: isBotArr, botDifficulty: botDiffArr, hostIndex: room.hostIndex, rules: room.rules, teamNames: room.teamNames }));
         }
     });
     scheduleBotActions(gameId);
@@ -760,7 +786,7 @@ function broadcastPlayerCount(gameId) {
     const botDiffArr = Array.from({length: room.players.length}, (_, i) => room.botDifficulty[i] || null);
     room.players.forEach(ws => {
         if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'playerCount', count: playerCount, required: NUM_PLAYERS, playerNames: room.playerNames, isBot: isBotArr, botDifficulty: botDiffArr, rules: room.rules, playerIds: room.playerIds }));
+            ws.send(JSON.stringify({ type: 'playerCount', count: playerCount, required: NUM_PLAYERS, playerNames: room.playerNames, isBot: isBotArr, botDifficulty: botDiffArr, rules: room.rules, playerIds: room.playerIds, teamNames: room.teamNames }));
         }
     });
 }

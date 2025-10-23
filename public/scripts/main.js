@@ -86,6 +86,7 @@ function connectToGame(gameId) {
                         </div>
                     </div>
                     ${renderSeatControls(data)}
+                    ${renderTeamNameControls(data)}
                 `;
                 wireLobbyControls(data);
                 break;
@@ -164,6 +165,18 @@ function renderSeatControls(data) {
     `;
 }
 
+function renderTeamNameControls(data) {
+    const teamNames = (data && data.teamNames) || ['Team A','Team B'];
+    return `
+        <div style="margin-top:12px;padding:10px;background:#222;border-radius:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <div style="font-weight:600;">Team Names:</div>
+            <label>Team A <input id="team-a-input" type="text" maxlength="20" value="${teamNames[0]||'Team A'}" style="padding:6px;border-radius:6px;border:1px solid #444;background:#111;color:#eee;"></label>
+            <label>Team B <input id="team-b-input" type="text" maxlength="20" value="${teamNames[1]||'Team B'}" style="padding:6px;border-radius:6px;border:1px solid #444;background:#111;color:#eee;"></label>
+            <button id="save-team-names" style="padding:8px 12px;border-radius:6px;border:0;background:#9c27b0;color:#fff;cursor:pointer;">Save</button>
+        </div>
+    `;
+}
+
 function wireLobbyControls(_data) {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     const startBtn = document.getElementById('start-game-btn');
@@ -188,6 +201,14 @@ function wireLobbyControls(_data) {
             ws.send(JSON.stringify({ type: 'REPLACE_WITH_BOT', seat, difficulty: diff }));
         });
     });
+    const saveTeams = document.getElementById('save-team-names');
+    if (saveTeams) {
+        saveTeams.onclick = () => {
+            const a = (document.getElementById('team-a-input')?.value || '').trim();
+            const b = (document.getElementById('team-b-input')?.value || '').trim();
+            ws.send(JSON.stringify({ type: 'SET_TEAM_NAMES', a, b }));
+        };
+    }
 }
 
 function renderLanding() {
@@ -429,6 +450,17 @@ function getTeam(playerIdx) {
     return (playerIdx % 2 === 0) ? 'Team A' : 'Team B';
 }
 
+// Team name helpers
+function getTeamIndex(idx) { return (idx % 2 === 0) ? 0 : 1; }
+function getTeamNameByIdx(stateOrData, idx) {
+    const names = (stateOrData && stateOrData.teamNames) || ['Team A','Team B'];
+    return names[getTeamIndex(idx)] || ((idx % 2 === 0) ? 'Team A' : 'Team B');
+}
+function teamNameFromKey(stateOrData, key) {
+    const names = (stateOrData && stateOrData.teamNames) || ['Team A','Team B'];
+    return key === 'Team B' ? (names[1] || 'Team B') : (names[0] || 'Team A');
+}
+
 let lastState = null; // Cache the last state for re-rendering
 function render(state) {
     const names = state.playerNames || [];
@@ -453,8 +485,8 @@ function render(state) {
         </div>
         <div class="scores">
             <strong>Scores:</strong> 
-            Team A: ${state.teamScores['Team A']} | 
-            Team B: ${state.teamScores['Team B']}
+            ${teamNameFromKey(state,'Team A')}: ${state.teamScores['Team A']} | 
+            ${teamNameFromKey(state,'Team B')}: ${state.teamScores['Team B']}
         </div>
     `;
 
@@ -468,7 +500,8 @@ function render(state) {
             html += `<div class="widow">${state.widow.map(renderCard).join('')}</div>`; // Show card backs
             html += state.allHands.map((hand, i) => `
                 <div class="player-area ${i === state.currentBidder ? 'active-player' : ''}">
-                        <strong>${getPlayerName(i)}${i === myPlayerIndex ? ' (You)' : ''}</strong> (${getTeam(i)})
+                    <div style="font-size:12px;color:#bbb;margin-bottom:4px;">${getTeamNameByIdx(state, i)}</div>
+                    <strong>${getPlayerName(i)}${i === myPlayerIndex ? ' (You)' : ''}</strong>
                     ${i === myPlayerIndex ? `<div class="hand">${groupAndSortHand(hand).map(renderCard).join('')}</div>` : `<div>${hand.length} cards</div>`}
                     <div>Bid: ${state.bids[i] !== null ? state.bids[i] : (state.passed[i] ? 'Passed' : '—')}</div>
                 </div>
@@ -498,7 +531,8 @@ function render(state) {
             html += `<p>Widow:</p><div class="widow">${state.widow.map(renderCard).join('')}</div>`;
             html += state.allHands.map((hand, i) => `
                 <div class="player-area">
-                        <strong>${getPlayerName(i)}${i === myPlayerIndex ? ' (You)' : ''}</strong> (${getTeam(i)})
+                    <div style=\"font-size:12px;color:#bbb;margin-bottom:4px;\">${getTeamNameByIdx(state, i)}</div>
+                    <strong>${getPlayerName(i)}${i === myPlayerIndex ? ' (You)' : ''}</strong>
                     ${i === myPlayerIndex ? `<div class="hand">${groupAndSortHand(hand).map(renderCard).join('')}</div>` : `<div>${hand.length} cards</div>`}
                     <div>Bid: ${state.bids[i] !== null ? state.bids[i] : (state.passed[i] ? 'Passed' : '—')}</div>
                 </div>
@@ -543,6 +577,7 @@ function render(state) {
                 // Show hands so the widow owner can review their cards while choosing trump
                 html += state.allHands.map((hand, i) => `
                     <div class="player-area ${i === myPlayerIndex ? 'active-player' : ''}">
+                        <div style=\"font-size:12px;color:#bbb;margin-bottom:4px;\">${getTeamNameByIdx(state, i)}</div>
                         <strong>${getPlayerName(i)}${i === myPlayerIndex ? ' (You)' : ''}</strong>
                         ${ i === myPlayerIndex ? 
                             `<div class="hand">${groupAndSortHand(hand).map(renderCard).join('')}</div>` 
@@ -556,6 +591,7 @@ function render(state) {
                 // Show hand counts for all players while waiting
                 html += state.allHands.map((hand, i) => `
                     <div class="player-area">
+                        <div style=\"font-size:12px;color:#bbb;margin-bottom:4px;\">${getTeamNameByIdx(state, i)}</div>
                         <strong>${getPlayerName(i)}${i === myPlayerIndex ? ' (You)' : ''}</strong>
                         ${ i === myPlayerIndex ? 
                             `<div class="hand">${groupAndSortHand(hand).map(renderCard).join('')}</div>` 
@@ -573,7 +609,7 @@ function render(state) {
             // Trick display with team label above each played card
             const trickCards = state.trick.map(p => `
                 <div class="trick-card">
-                    <div class="card-team">${getTeam(p.player)}</div>
+                    <div class="card-team">${getTeamNameByIdx(state, p.player)}</div>
                     ${renderCard(p.card)}
                 </div>
             `).join('');
@@ -592,6 +628,7 @@ function render(state) {
 
             html += state.allHands.map((hand, i) => `
                 <div class="player-area ${i === state.currentPlayer ? 'active-player' : ''}">
+                        <div style=\"font-size:12px;color:#bbb;margin-bottom:4px;\">${getTeamNameByIdx(state, i)}</div>
                         <strong>${getPlayerName(i)}${i === myPlayerIndex ? ' (You)' : ''}</strong>
                     ${ i === myPlayerIndex ? 
                         `<div class="hand play-hand">${groupAndSortHand(hand).map(renderCard).join('')}</div>
@@ -616,7 +653,7 @@ function render(state) {
             html += `<div>Trump: <strong>${state.trumpSuit}</strong></div>`;
             const trickCards2 = state.trick.map(p => `
                 <div class="trick-card">
-                    <div class="card-team">${getTeam(p.player)}</div>
+                    <div class="card-team">${getTeamNameByIdx(state, p.player)}</div>
                     ${renderCard(p.card)}
                 </div>
             `).join('');
@@ -626,6 +663,10 @@ function render(state) {
                 html += `<div class="called-color-notice">Led Suit: <strong>${state.ledSuit}</strong>${rookLed ? ' (Rook called)' : ''}</div>`;
             }
             html += `</div>`;
+            if (state.postTrick && state.postTrick.winner) {
+                const winTeam = teamNameFromKey(state, state.postTrick.winner);
+                html += `<div style=\"margin-top:8px;font-weight:600;color:#ffd54f;\">Trick won by: ${winTeam}</div>`;
+            }
             if (myPlayerIndex === state.hostIndex) {
                 html += `<button id="next-trick-btn" style="margin-top:8px;padding:8px 12px;border-radius:6px;border:0;background:#4caf50;color:#fff;cursor:pointer;">Next Trick</button>`;
             } else {
@@ -639,21 +680,21 @@ function render(state) {
             const otherTeam = biddingTeam === 'Team A' ? 'Team B' : 'Team A';
             let resultMsg = '';
             if (teamPoints[biddingTeam] >= bidAmount) {
-                resultMsg = `${biddingTeam} made their bid!`;
+                resultMsg = `${teamNameFromKey(state, biddingTeam)} made their bid!`;
             } else {
-                resultMsg = `${biddingTeam} FAILED their bid!`;
+                resultMsg = `${teamNameFromKey(state, biddingTeam)} FAILED their bid!`;
             }
             html += `<h2>Hand Over</h2>`;
             html += `<div>${resultMsg}</div>`;
-            html += `<div><strong>Hand Points:</strong> Team A: ${teamPoints['Team A']}, Team B: ${teamPoints['Team B']}</div>`;
+            html += `<div><strong>Hand Points:</strong> ${teamNameFromKey(state,'Team A')}: ${teamPoints['Team A']}, ${teamNameFromKey(state,'Team B')}: ${teamPoints['Team B']}</div>`;
             html += `<button id="deal-again-btn">Deal Again</button>`;
             break;
 
         case 'game_over':
             html += `<h2>Game Over</h2>`;
-            const winner = state.matchWinner === 'Tie' ? 'It\'s a tie!' : `${state.matchWinner} wins!`;
+            const winner = state.matchWinner === 'Tie' ? 'It\'s a tie!' : `${teamNameFromKey(state, state.matchWinner)} wins!`;
             html += `<div style="margin:6px 0;">${winner}</div>`;
-            html += `<div><strong>Final Scores:</strong> Team A: ${state.teamScores['Team A']}, Team B: ${state.teamScores['Team B']}</div>`;
+            html += `<div><strong>Final Scores:</strong> ${teamNameFromKey(state,'Team A')}: ${state.teamScores['Team A']}, ${teamNameFromKey(state,'Team B')}: ${state.teamScores['Team B']}</div>`;
             html += `<button id="deal-again-btn">Play Again</button>`;
             break;
     }
