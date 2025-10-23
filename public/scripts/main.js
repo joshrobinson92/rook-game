@@ -209,6 +209,22 @@ function wireLobbyControls(_data) {
             ws.send(JSON.stringify({ type: 'SET_TEAM_NAMES', a, b }));
         };
     }
+    const teamAInput = document.getElementById('team-a-input');
+    if (teamAInput) {
+        teamAInput.addEventListener('blur', () => {
+            const a = teamAInput.value.trim();
+            const b = (document.getElementById('team-b-input')?.value || '').trim();
+            ws.send(JSON.stringify({ type: 'SET_TEAM_NAMES', a, b }));
+        });
+    }
+    const teamBInput = document.getElementById('team-b-input');
+    if (teamBInput) {
+        teamBInput.addEventListener('blur', () => {
+            const a = (document.getElementById('team-a-input')?.value || '').trim();
+            const b = teamBInput.value.trim();
+            ws.send(JSON.stringify({ type: 'SET_TEAM_NAMES', a, b }));
+        });
+    }
 }
 
 function renderLanding() {
@@ -500,7 +516,7 @@ function render(state) {
             html += `<div class="widow">${state.widow.map(renderCard).join('')}</div>`; // Show card backs
             html += state.allHands.map((hand, i) => `
                 <div class="player-area ${i === state.currentBidder ? 'active-player' : ''}">
-                    <div style="font-size:12px;color:#bbb;margin-bottom:4px;">${getTeamNameByIdx(state, i)}</div>
+                    <div style="font-size:14px;font-weight:bold;color:#ffd54f;margin-bottom:4px;">${getTeamNameByIdx(state, i)}</div>
                     <strong>${getPlayerName(i)}${i === myPlayerIndex ? ' (You)' : ''}</strong>
                     ${i === myPlayerIndex ? `<div class="hand">${groupAndSortHand(hand).map(renderCard).join('')}</div>` : `<div>${hand.length} cards</div>`}
                     <div>Bid: ${state.bids[i] !== null ? state.bids[i] : (state.passed[i] ? 'Passed' : '—')}</div>
@@ -531,7 +547,7 @@ function render(state) {
             html += `<p>Widow:</p><div class="widow">${state.widow.map(renderCard).join('')}</div>`;
             html += state.allHands.map((hand, i) => `
                 <div class="player-area">
-                    <div style=\"font-size:12px;color:#bbb;margin-bottom:4px;\">${getTeamNameByIdx(state, i)}</div>
+                    <div style=\"font-size:14px;font-weight:bold;color:#ffd54f;margin-bottom:4px;\">${getTeamNameByIdx(state, i)}</div>
                     <strong>${getPlayerName(i)}${i === myPlayerIndex ? ' (You)' : ''}</strong>
                     ${i === myPlayerIndex ? `<div class="hand">${groupAndSortHand(hand).map(renderCard).join('')}</div>` : `<div>${hand.length} cards</div>`}
                     <div>Bid: ${state.bids[i] !== null ? state.bids[i] : (state.passed[i] ? 'Passed' : '—')}</div>
@@ -577,7 +593,7 @@ function render(state) {
                 // Show hands so the widow owner can review their cards while choosing trump
                 html += state.allHands.map((hand, i) => `
                     <div class="player-area ${i === myPlayerIndex ? 'active-player' : ''}">
-                        <div style=\"font-size:12px;color:#bbb;margin-bottom:4px;\">${getTeamNameByIdx(state, i)}</div>
+                        <div style=\"font-size:14px;font-weight:bold;color:#ffd54f;margin-bottom:4px;\">${getTeamNameByIdx(state, i)}</div>
                         <strong>${getPlayerName(i)}${i === myPlayerIndex ? ' (You)' : ''}</strong>
                         ${ i === myPlayerIndex ? 
                             `<div class="hand">${groupAndSortHand(hand).map(renderCard).join('')}</div>` 
@@ -591,7 +607,7 @@ function render(state) {
                 // Show hand counts for all players while waiting
                 html += state.allHands.map((hand, i) => `
                     <div class="player-area">
-                        <div style=\"font-size:12px;color:#bbb;margin-bottom:4px;\">${getTeamNameByIdx(state, i)}</div>
+                        <div style=\"font-size:14px;font-weight:bold;color:#ffd54f;margin-bottom:4px;\">${getTeamNameByIdx(state, i)}</div>
                         <strong>${getPlayerName(i)}${i === myPlayerIndex ? ' (You)' : ''}</strong>
                         ${ i === myPlayerIndex ? 
                             `<div class="hand">${groupAndSortHand(hand).map(renderCard).join('')}</div>` 
@@ -609,7 +625,7 @@ function render(state) {
             // Trick display with team label above each played card
             const trickCards = state.trick.map(p => `
                 <div class="trick-card">
-                    <div class="card-team">${getTeamNameByIdx(state, p.player)}</div>
+                    <div class="card-team" style="font-weight:bold;color:#ffd54f;">${getTeamNameByIdx(state, p.player)}</div>
                     ${renderCard(p.card)}
                 </div>
             `).join('');
@@ -628,7 +644,7 @@ function render(state) {
 
             html += state.allHands.map((hand, i) => `
                 <div class="player-area ${i === state.currentPlayer ? 'active-player' : ''}">
-                        <div style=\"font-size:12px;color:#bbb;margin-bottom:4px;\">${getTeamNameByIdx(state, i)}</div>
+                        <div style=\"font-size:14px;font-weight:bold;color:#ffd54f;margin-bottom:4px;\">${getTeamNameByIdx(state, i)}</div>
                         <strong>${getPlayerName(i)}${i === myPlayerIndex ? ' (You)' : ''}</strong>
                     ${ i === myPlayerIndex ? 
                         `<div class="hand play-hand">${groupAndSortHand(hand).map(renderCard).join('')}</div>
@@ -653,7 +669,7 @@ function render(state) {
             html += `<div>Trump: <strong>${state.trumpSuit}</strong></div>`;
             const trickCards2 = state.trick.map(p => `
                 <div class="trick-card">
-                    <div class="card-team">${getTeamNameByIdx(state, p.player)}</div>
+                    <div class="card-team" style="font-weight:bold;color:#ffd54f;">${getTeamNameByIdx(state, p.player)}</div>
                     ${renderCard(p.card)}
                 </div>
             `).join('');
